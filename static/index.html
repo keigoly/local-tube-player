@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyLocalTube</title>
+<link rel="icon" href="/static/app.ico">
+<style>
+:root{
+  --bg:#0f0f0f; --card:#212121; --line:#303030;
+  --fg:#f1f1f1; --fg2:#aaa; --accent:#ff3d3d; --ok:#3ea6ff; --warn:#ffb020;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}   /* display を指定した要素でも hidden で確実に消す */
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--fg); overflow:hidden;
+  font-family:"Segoe UI","Yu Gothic UI",system-ui,sans-serif;
+}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+
+/* ---------- ヘッダ ---------- */
+header{
+  position:fixed;inset:0 0 auto 0;height:56px;z-index:30;
+  display:flex;align-items:center;gap:16px;padding:0 16px;
+  background:var(--bg);border-bottom:1px solid var(--line);
+}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:-.3px}
+.logo .mark{width:28px;height:20px;border-radius:6px;background:var(--accent);
+  display:grid;place-items:center}
+.logo .mark::after{content:"";border-left:8px solid #fff;border-top:5px solid transparent;
+  border-bottom:5px solid transparent;margin-left:2px}
+.search{flex:1;max-width:560px;display:flex}
+.search input{
+  flex:1;height:38px;padding:0 14px;border-radius:19px 0 0 19px;
+  background:#121212;border:1px solid var(--line);border-right:none;color:var(--fg);outline:none;
+}
+.search input:focus{border-color:var(--ok)}
+.search button{
+  width:60px;border:1px solid var(--line);border-radius:0 19px 19px 0;background:#222;
+}
+.spacer{flex:1}
+.tool{padding:8px 14px;border-radius:18px;background:#272727;font-size:13px;white-space:nowrap}
+.tool:hover{background:#3a3a3a}
+.tool[disabled]{opacity:.5;cursor:default}
+
+/* ---------- レイアウト ---------- */
+#app{position:fixed;inset:56px 0 0 0;display:flex}
+aside{
+  width:232px;flex:0 0 232px;overflow-y:auto;padding:12px 8px;
+  border-right:1px solid var(--line);
+}
+aside h4{margin:14px 10px 6px;font-size:12px;color:var(--fg2);letter-spacing:.4px}
+.folder{
+  display:flex;justify-content:space-between;gap:8px;width:100%;
+  padding:8px 10px;border-radius:10px;font-size:13px;text-align:left;
+}
+.folder:hover{background:#242424}
+.folder.on{background:#2f2f2f;font-weight:600}
+.folder span:last-child{color:var(--fg2);font-size:11px;flex:0 0 auto}
+main{flex:1;overflow-y:auto;padding:20px 24px 60px}
+
+/* ---------- グリッド ---------- */
+.grid{display:grid;gap:18px 14px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.card{cursor:pointer;display:flex;flex-direction:column;gap:9px}
+.thumbwrap{
+  position:relative;aspect-ratio:16/9;border-radius:var(--radius);overflow:hidden;background:#000;
+}
+.thumbwrap img{width:100%;height:100%;object-fit:cover;display:block}
+.card:hover .thumbwrap{outline:2px solid var(--line)}
+.dur{
+  position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.8);
+  padding:1px 5px;border-radius:4px;font-size:12px;font-variant-numeric:tabular-nums;
+}
+.badges{position:absolute;left:6px;top:6px;display:flex;gap:4px;flex-wrap:wrap;max-width:85%}
+.badge{font-size:10.5px;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.78);
+  border:1px solid rgba(255,255,255,.18)}
+.badge.hi{background:var(--accent);border-color:transparent;font-weight:600}
+.badge.ok{background:var(--ok);border-color:transparent;color:#001;font-weight:600}
+.badge.warn{background:var(--warn);border-color:transparent;color:#201500;font-weight:600}
+.meta{display:flex;align-items:flex-start;gap:4px}
+.meta .txt{flex:1;min-width:0}
+.meta .title{font-size:14px;line-height:1.35;font-weight:500;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta .sub{margin-top:3px;font-size:12px;color:var(--fg2)}
+.prog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.18)}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .3s}
+
+/* ---------- ⋮ メニュー ---------- */
+.kebab{flex:0 0 auto;width:34px;height:34px;margin:-6px -8px 0 0;border-radius:50%;
+  display:grid;place-items:center;opacity:0}
+.kebab svg{width:20px;height:20px;fill:currentColor}
+.card:hover .kebab,.kebab.open,.kebab:focus-visible{opacity:1}
+.kebab:hover,.kebab.open{background:#3a3a3a}
+@media (hover:none){.kebab{opacity:1}}
+.menu{position:fixed;z-index:80;min-width:232px;padding:8px 0;background:#282828;
+  border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.6)}
+.menu button{display:flex;align-items:center;gap:14px;width:100%;padding:9px 18px 9px 16px;
+  font-size:14px;text-align:left;white-space:nowrap}
+.menu button:hover,.menu button:focus-visible{background:#3a3a3a;outline:none}
+.menu button.danger{color:#ff7070}
+.menu svg{width:20px;height:20px;flex:0 0 20px;fill:currentColor}
+.menu hr{border:none;border-top:1px solid var(--line);margin:7px 0}
+
+/* ---------- ダイアログ ---------- */
+.modal{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.55);display:grid;place-items:center}
+.dlg{width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 64px);display:flex;flex-direction:column;
+  background:#212121;border:1px solid var(--line);border-radius:14px;padding:20px 22px 16px;
+  box-shadow:0 16px 48px rgba(0,0,0,.7)}
+.dlg h3{margin:0 0 6px;font-size:17px}
+.dlg .body{min-height:0;display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.6}
+.dlg .fname{color:var(--fg2);word-break:break-all}
+.dlg .hint{color:var(--fg2);font-size:12.5px;white-space:pre-line}
+.dlg .err{color:#ff7070;font-size:13px;margin:8px 0 0;min-height:0}
+.dlg .err:empty{display:none}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.tool.primary{background:var(--ok);color:#001;font-weight:600}
+.tool.primary:hover{background:#65b8ff}
+.tool.danger{background:#e5484d;color:#fff;font-weight:600}
+.tool.danger:hover{background:#f05a5f}
+.dlg input[type=text]{height:36px;padding:0 12px;border-radius:8px;background:#121212;
+  border:1px solid var(--line);color:var(--fg);outline:none;font:inherit}
+.dlg input[type=text]:focus{border-color:var(--ok)}
+.dirlist{flex:1;min-height:180px;max-height:46vh;overflow-y:auto;border:1px solid var(--line);
+  border-radius:8px;padding:4px}
+.dir{display:flex;justify-content:space-between;gap:10px;width:100%;padding:7px 10px;border-radius:6px;
+  font-size:13px;text-align:left}
+.dir:hover{background:#2c2c2c}
+.dir.sel{background:#263850;outline:1px solid var(--ok)}
+.dir[disabled]{opacity:.45;cursor:default;background:none}
+.dir .n{color:var(--fg2);font-size:11px;flex:0 0 auto}
+.dir .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dir .lb i{font-style:normal;color:var(--fg2)}
+
+/* ---------- 通知 ---------- */
+#toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);z-index:95;max-width:min(720px,90vw);
+  padding:11px 18px;border-radius:10px;background:#f1f1f1;color:#0f0f0f;font-size:13.5px;
+  box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#toast.err{background:#e5484d;color:#fff}
+
+/* ---------- プレイヤー ---------- */
+#player{position:fixed;inset:0;z-index:50;background:#000;display:none;flex-direction:column}
+#player.on{display:flex}
+
+/* 動画の上に重ねる YouTube 風の操作バー。カーソルを動かすと出て、再生中は止めると消える */
+.stage{position:relative;flex:1;min-height:0;background:#000;overflow:hidden;user-select:none;
+  font-family:"Roboto","Segoe UI","Yu Gothic UI",system-ui,sans-serif}
+.stage video{position:absolute;inset:0;width:100%;height:100%;background:#000}
+.stage.idle{cursor:none}
+.yt-grad{position:absolute;left:0;right:0;bottom:0;height:130px;pointer-events:none;
+  background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,.32) 50%,transparent);transition:opacity .25s}
+/* 上のバー: 「←」（一覧に戻る）とタイトル。操作バーと一緒に出て一緒に消える */
+.yt-top{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:6px;
+  padding:8px 20px 44px 8px;pointer-events:none;transition:opacity .25s;
+  background:linear-gradient(to bottom,rgba(0,0,0,.62),transparent)}
+.yt-top .yb{pointer-events:auto}
+.yt-top .t{min-width:0;display:flex;flex-direction:column;gap:2px;text-shadow:0 0 6px rgba(0,0,0,.6)}
+.yt-top .t b{font-size:18px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.yt-top .t span{font-size:12.5px;color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stage:fullscreen .yt-top .t b{font-size:22px}
+.yt-controls{position:absolute;left:12px;right:12px;bottom:0;transition:opacity .25s}
+.stage.idle .yt-controls,.stage.idle .yt-grad,.stage.idle .yt-top{opacity:0;pointer-events:none}
+
+.yt-progress{position:relative;height:18px;cursor:pointer;touch-action:none}
+.yt-progress .bar{position:absolute;left:0;right:0;bottom:7px;height:3px;
+  background:rgba(255,255,255,.2);transition:height .1s,bottom .1s}
+.yt-progress:hover .bar,.yt-progress.drag .bar{height:5px;bottom:6px}
+.yt-progress .bar i{position:absolute;left:0;top:0;bottom:0;width:0}
+.yt-progress .buf{background:rgba(255,255,255,.4)}
+.yt-progress .hov{background:rgba(255,255,255,.5);display:none}
+.yt-progress:hover .hov{display:block}
+.yt-progress .play{background:#f00}
+.yt-knob{position:absolute;bottom:2.5px;left:0;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;
+  background:#f00;transform:scale(0);transition:transform .1s}
+.yt-progress:hover .yt-knob,.yt-progress.drag .yt-knob{transform:scale(1)}
+.yt-tip{position:absolute;bottom:24px;left:0;transform:translateX(-50%);padding:4px 8px;border-radius:4px;
+  background:rgba(28,28,28,.9);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap;
+  display:none;pointer-events:none}
+.yt-progress:hover .yt-tip,.yt-progress.drag .yt-tip{display:block}
+.yt-progress.noseek{cursor:default}
+.yt-progress.noseek .yt-knob,.yt-progress.noseek .yt-tip,.yt-progress.noseek .hov{display:none}
+
+.yt-row{display:flex;align-items:center;justify-content:space-between;height:48px}
+.yt-row .l,.yt-row .r{display:flex;align-items:center;height:100%;min-width:0}
+.stage:fullscreen .yt-row{height:54px}
+.yb{position:relative;flex:0 0 auto;width:48px;height:48px;display:grid;place-items:center;opacity:.9}
+.yb:hover,.yb:focus-visible{opacity:1;outline:none}
+.yb:focus-visible{box-shadow:inset 0 0 0 2px rgba(255,255,255,.9);border-radius:8px}   /* キーボード操作時の枠 */
+.yb svg{width:36px;height:36px;fill:#fff}
+.stage:fullscreen .yb{width:54px;height:54px}
+.stage:fullscreen .yb svg{width:40px;height:40px}
+/* ボタンのツールチップ（YouTube と同じくボタンの上に出す） */
+.yb[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:62px;left:50%;transform:translateX(-50%);
+  padding:5px 9px;border-radius:4px;background:rgba(28,28,28,.9);font-size:12.5px;white-space:nowrap;
+  pointer-events:none}
+.yt-row .r .yb:last-child[data-tip]:hover::after{left:auto;right:0;transform:none}
+.yt-row .l .yb:first-child[data-tip]:hover::after{left:0;transform:none}
+.yt-top .yb[data-tip]:hover::after{bottom:auto;top:52px;left:4px;transform:none}
+.stage:fullscreen .yb[data-tip]:hover::after{bottom:74px}
+.stage:fullscreen .yt-top .yb[data-tip]:hover::after{bottom:auto;top:58px}
+.stage:fullscreen .yt-controls{left:24px;right:24px}
+/* 重なり順: エラー表示より「←」・操作バー・設定メニューを上に（エラーでも戻れるように） */
+.yt-err{z-index:1}
+.yt-top,.yt-controls,.yt-settings{z-index:2}
+.stage.settings-open .yb[data-tip]:hover::after{display:none}
+.yt-vol{display:flex;align-items:center;height:100%}
+.yt-vol input{-webkit-appearance:none;appearance:none;width:0;opacity:0;height:3px;margin:0;cursor:pointer;
+  transition:width .2s,opacity .2s,margin .2s;
+  background:linear-gradient(to right,#fff var(--p,100%),rgba(255,255,255,.25) var(--p,100%))}
+/* クリックでミュートしただけで開きっぱなしにならないよう、フォーカスはキーボード操作時だけ見る */
+.yt-vol:hover input,.yt-vol:has(:focus-visible) input,.yt-vol.drag input{width:64px;opacity:1;margin:0 10px 0 2px}
+.yt-vol input::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#fff}
+.yt-time{padding:0 10px 0 6px;font-size:13.5px;color:#eee;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* アイコン＋数値のボタン（音量ブースト・再生速度・120fps）。ホイールで値を変えられる */
+.yb.wide{width:auto;min-width:48px;padding:0 6px;display:flex;align-items:center;gap:2px}
+.yb .lv{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.yb.on svg{fill:#3ea6ff}
+.yb.on .lv{color:#3ea6ff}
+.yt-fps{display:grid;place-items:center;min-width:34px;height:22px;padding:0 5px;border:2px solid #fff;
+  border-radius:5px;font-size:12px;font-weight:700;letter-spacing:-.3px;line-height:1}
+.yb.on .yt-fps{background:#f00;border-color:#f00}                /* 120fps版を再生中 */
+.yb.busy .yt-fps{border-style:dashed;font-weight:600}            /* 変換中 */
+.stage:fullscreen .yb.wide{min-width:54px}
+.stage:fullscreen .yt-fps{height:26px;font-size:14px}
+.stage:fullscreen .yt-time{font-size:18px}
+
+.yt-bezel{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
+  background:rgba(0,0,0,.5);display:grid;place-items:center;opacity:0;pointer-events:none}
+.yt-bezel svg{width:36px;height:36px;fill:#fff}
+.yt-bezel.show{animation:ytBezel .55s linear}
+@keyframes ytBezel{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(2)}}
+.yt-bubble{position:absolute;top:12%;left:50%;transform:translateX(-50%);padding:10px 18px;border-radius:6px;
+  background:rgba(0,0,0,.55);font-size:17px;opacity:0;pointer-events:none;transition:opacity .35s;white-space:nowrap}
+.yt-bubble.show{opacity:1;transition:none}
+.yt-spin{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;
+  border:4px solid rgba(255,255,255,.2);border-top-color:#fff;animation:ytSpin 1s linear infinite;
+  display:none;pointer-events:none}
+.stage.waiting .yt-spin{display:block}
+@keyframes ytSpin{to{transform:rotate(360deg)}}
+.yt-err{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:24px;
+  background:rgba(0,0,0,.75);font-size:15px;line-height:1.9}
+.stage.error .yt-err{display:grid}
+
+/* 下端は操作バー（シークバー 18px + ボタン列 48px）の上。重ねるとシークバーの右端を隠してしまう */
+.yt-settings{position:absolute;right:12px;bottom:72px;min-width:260px;max-height:calc(100% - 90px);overflow-y:auto;
+  padding:8px 0;border-radius:12px;background:rgba(28,28,28,.94);font-size:14px;display:none}
+.yt-settings.on{display:block}
+.stage:fullscreen .yt-settings{bottom:78px;right:24px}
+.yt-settings button{display:flex;align-items:center;justify-content:space-between;gap:28px;width:100%;
+  height:40px;padding:0 16px;text-align:left}
+.yt-settings button:hover,.yt-settings button:focus-visible{background:rgba(255,255,255,.1);outline:none}
+.yt-settings .val{color:#ddd}
+.yt-settings hr{border:none;border-top:1px solid rgba(255,255,255,.2);margin:8px 0}
+.yt-settings .ic{justify-content:flex-start;gap:14px}
+.yt-settings .danger{color:#ff8080}
+.yt-settings button[disabled]{opacity:.55;cursor:default;background:none}
+.yt-settings svg{width:24px;height:24px;fill:#fff}
+.yt-settings .head{justify-content:flex-start;gap:10px;border-bottom:1px solid rgba(255,255,255,.2);
+  margin-bottom:8px;height:44px}
+.yt-settings .opt{justify-content:flex-start;gap:12px}
+.yt-settings .opt::before{content:"";width:18px}
+.yt-settings .opt.sel::before{content:"✓"}
+.yt-switch{position:relative;width:36px;height:14px;border-radius:7px;background:rgba(255,255,255,.3)}
+.yt-switch::after{content:"";position:absolute;top:-3px;left:-2px;width:20px;height:20px;border-radius:50%;
+  background:#bbb;transition:left .15s}
+.yt-switch.on{background:rgba(255,255,255,.5)}
+.yt-switch.on::after{left:18px;background:#fff}
+
+/* ---------- ジョブ ---------- */
+#jobs{
+  position:fixed;right:16px;bottom:16px;width:340px;max-height:52vh;overflow-y:auto;z-index:60;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:10px 12px;display:none;box-shadow:0 8px 28px rgba(0,0,0,.6);
+}
+#jobs.on{display:block}
+#jobs h5{margin:2px 0 8px;font-size:12px;color:var(--fg2);display:flex;justify-content:space-between}
+.job{padding:8px 0;border-top:1px solid var(--line);font-size:12.5px}
+.job:first-of-type{border-top:none}
+.job .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job .m{color:var(--fg2);margin:2px 0 5px;font-size:11.5px}
+.track{height:5px;border-radius:3px;background:#3a3a3a;overflow:hidden}
+.track i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.job.done .track i{background:#3dd68c}
+.job.error .track i{background:var(--accent)}
+
+.empty{padding:60px 20px;text-align:center;color:var(--fg2);line-height:1.9}
+.note{font-size:12px;color:var(--fg2);margin:0 0 16px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="mark"></span>MyLocalTube</div>
+  <form class="search" id="searchForm">
+    <input id="q" placeholder="ライブラリを検索">
+    <button type="submit" title="検索">&#128269;</button>
+  </form>
+  <div class="spacer"></div>
+  <button class="tool" id="filterBtn">すべて</button>
+  <button class="tool" id="scanBtn">再スキャン</button>
+  <button class="tool" id="jobsBtn">変換ジョブ</button>
+</header>
+
+<div id="app">
+  <aside id="side"></aside>
+  <main>
+    <p class="note" id="note"></p>
+    <div class="grid" id="grid"></div>
+  </main>
+</div>
+
+<div id="player">
+  <div class="stage" id="stage">
+    <video id="v" playsinline></video>
+    <div class="yt-top" id="ytTop">
+      <button class="yb" id="ytBack" data-tip="一覧に戻る（Esc）" aria-label="一覧に戻る"></button>
+      <div class="t"><b id="ytTitle"></b><span id="ytSub"></span></div>
+    </div>
+    <div class="yt-bezel" id="ytBezel"></div>
+    <div class="yt-bubble" id="ytBubble"></div>
+    <div class="yt-spin"></div>
+    <div class="yt-err" id="ytErr"></div>
+    <div class="yt-grad"></div>
+    <div class="yt-settings" id="ytSettings" role="menu"></div>
+    <div class="yt-controls" id="ytCtl">
+      <div class="yt-progress" id="ytProg" role="slider" aria-label="シークバー" tabindex="-1">
+        <div class="bar"><i class="buf"></i><i class="hov"></i><i class="play"></i></div>
+        <div class="yt-knob"></div>
+        <div class="yt-tip"></div>
+      </div>
+      <div class="yt-row">
+        <div class="l">
+          <button class="yb" id="ytPlay"></button>
+          <div class="yt-vol" id="ytVol">
+            <button class="yb" id="ytMute"></button>
+            <input type="range" id="ytVolume" min="0" max="1" step="0.01" aria-label="音量">
+          </div>
+          <button class="yb wide" id="ytBoost"></button>
+          <div class="yt-time"><span id="ytCur">0:00</span> / <span id="ytDur">0:00</span></div>
+        </div>
+        <div class="r">
+          <button class="yb wide" id="ytFps"></button>
+          <button class="yb wide" id="ytSpeed"></button>
+          <button class="yb" id="ytSet" data-tip="設定" aria-label="設定" aria-haspopup="menu"></button>
+          <button class="yb" id="ytFs"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="jobs">
+  <h5><span>変換ジョブ</span><button id="jobsClose" style="color:var(--fg2)">&#10005;</button></h5>
+  <div id="joblist"></div>
+</div>
+
+<script>
+// features.fps120 … 120fps 変換ツールが設定されているか（/api/features）。無ければ関連 UI を出さない
+const state = {q:"", folder:"", unconverted:false, videos:[], jobs:{}, current:null,
+               features: {fps120: true}};
+const $ = s => document.querySelector(s);
+
+const svg = d => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg>';
+const ICON = {
+  kebab: svg("M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"),
+  play: svg("M8 5v14l11-7z"),
+  fps: svg("M7 2v11h3v9l7-12h-4l4-8z"),
+  move: svg("M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 12v-3h-4v-4h4V8l5 5-5 5z"),
+  folder: svg("M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"),
+  trash: svg("M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"),
+};
+
+const esc = s => String(s === null || s === undefined ? "" : s)
+  .replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+const fmtDur = s => {
+  if(!s || s <= 0) return "";
+  s = Math.floor(s);                     // プレイヤーの表示（fmtTime）と同じく切り捨て
+  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  const pad = n => String(n).padStart(2,"0");
+  return h ? h + ":" + pad(m) + ":" + pad(x) : m + ":" + pad(x);
+};
+const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB"
+                                     : Math.round(b/1048576)+" MB";
+
+async function load(){
+  const p = new URLSearchParams({q:state.q, folder:state.folder,
+                                 unconverted: state.unconverted ? 1 : 0});
+  state.videos = await (await fetch("/api/videos?"+p)).json();
+  // 再生中の動画の情報も新しいもの（変換済み版ができた・移動した等）に差し替える
+  if(state.current){
+    const cur = state.videos.find(x => x.id === state.current.id);
+    if(cur) state.current = cur;
+  }
+  render();
+  const fs = await (await fetch("/api/folders")).json();
+  const side = $("#side");
+  side.innerHTML = "<h4>フォルダ</h4>";
+  const mk = (label, count, value, on) => {
+    const b = document.createElement("button");
+    b.className = "folder" + (on ? " on" : "");
+    b.title = value || "すべて";
+    b.innerHTML = "<span>" + esc(label) + "</span><span>" + count + "</span>";
+    b.onclick = () => { state.folder = value; load(); };
+    side.appendChild(b);
+  };
+  mk("すべて", state.videos.length, "", state.folder === "");
+  fs.filter(f => f.rel_dir).forEach(f =>
+    mk(f.rel_dir.split("\\").pop(), f.n, f.rel_dir, state.folder === f.rel_dir));
+}
+
+function render(){
+  const g = $("#grid");
+  if(!state.videos.length){
+    g.innerHTML = '<div class="empty" style="grid-column:1/-1">' +
+      "動画が見つかりません。<br>右上の「再スキャン」を押すか、" +
+      "config_local.py の LIBRARY_ROOTS を確認してください。</div>";
+    $("#note").textContent = "";
+    return;
+  }
+  $("#note").textContent = state.videos.length + " 本";
+  g.innerHTML = "";
+  state.videos.forEach(v => {
+    const b = [];
+    if(v.is_converted) b.push('<span class="badge hi">120fps</span>');
+    else if(v.converted_id) b.push('<span class="badge ok">変換済みあり</span>');
+    if(!v.native) b.push('<span class="badge warn">シーク不可</span>');
+    if(v.width) b.push('<span class="badge">' + v.height + "p" +
+      (v.fps ? " " + v.fps.toFixed(0) + "fps" : "") + "</span>");
+    const j = v.job;
+    const bar = j ? '<div class="prog"><i style="width:' +
+      (j.progress*100).toFixed(1) + '%"></i></div>' : "";
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML =
+      '<div class="thumbwrap">' +
+        '<img loading="lazy" src="/thumb/' + v.id + '" alt="">' +
+        '<div class="badges">' + b.join("") + "</div>" +
+        '<div class="dur">' + fmtDur(v.duration) + "</div>" + bar +
+      "</div>" +
+      '<div class="meta"><div class="txt"><div class="title">' + esc(v.name) + "</div>" +
+      '<div class="sub">' + esc(v.rel_dir || "(直下)") + " &middot; " + fmtSize(v.size) +
+      "</div></div>" +
+      '<button class="kebab" title="その他の操作" aria-label="その他の操作" aria-haspopup="menu">' +
+      ICON.kebab + "</button></div>";
+    card.querySelector("img").onerror = function(){ this.style.opacity = .15; };
+    card.onclick = () => openVideo(v.id);
+    const kb = card.querySelector(".kebab");
+    kb.onclick = e => { e.stopPropagation(); toggleMenu(v, kb, false); };
+    card.oncontextmenu = e => { e.preventDefault(); openMenu(v, {x: e.clientX, y: e.clientY}, false); };
+    g.appendChild(card);
+  });
+}
+
+// id … 一覧の動画の id か、動画情報そのもの（エクスプローラーから開いたライブラリ外の動画など）
+// opts.at … その位置から再生する（120fps版と元の動画を切り替えるとき）/ opts.paused … 止めたまま
+function openVideo(id, opts = {}){
+  const v = typeof id === "object" ? id : state.videos.find(x => x.id === id);
+  if(!v) return;
+  state.current = v;
+  setPlayerInfo(v);
+  playerReset();
+  $("#player").classList.add("on");
+  // プレイヤーの裏にある一覧へ Tab でフォーカスが行かないようにする
+  $("header").inert = $("#app").inert = true;
+  if(v.playable === 0){
+    // 再生できない形式（MPEG-2 映像の .ts など）。読み込まずに理由だけ出す。
+    // 直前に再生していた動画は止める（src を外すだけだと鳴り続ける）
+    const vid = $("#v");
+    vid.pause(); vid.removeAttribute("src"); vid.load();
+    E.err.textContent = "この動画は再生できない形式です（映像: " + (v.vcodec || "なし") + "）";
+    STAGE.classList.add("error");
+    ytShow();
+    drawRightButtons();
+    return;
+  }
+  const src = "/media/" + v.id;
+  $("#v").src = src;
+  if(opts.at) seekWhenReady(src, opts.at, !opts.paused);
+  else $("#v").play().catch(() => {});
+  ytShow();
+  drawRightButtons();
+}
+// アプリ版（desktop.py）から呼ばれる。エクスプローラーでダブルクリックされた動画を開く
+window.openFromApp = v => {
+  closeMenu();
+  openVideo(v);
+};
+// src の読み込みが済んだら t 秒へ。その間に別の動画へ切り替わっていたら何もしない
+function seekWhenReady(src, t, play){
+  const v = $("#v");
+  v.addEventListener("loadedmetadata", () => {
+    if(v.getAttribute("src") !== src) return;
+    try { v.currentTime = t; } catch(e){ /* シーク不可の形式 */ }
+    if(play) v.play().catch(() => {});
+  }, {once: true});
+}
+function setPlayerInfo(v){
+  $("#ytTitle").textContent = v.name;     // 左上（「←」の隣）に出すタイトル
+  $("#ytSub").textContent = (v.rel_dir || "(直下)") + " · " +
+    (v.width || "?") + "x" + (v.height || "?") +
+    (v.fps ? " · " + v.fps.toFixed(2) + "fps" : "") +
+    (v.native ? "" : " · この形式はシークできません");
+}
+function closePlayer(){
+  const v = $("#v");
+  if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  v.pause(); v.removeAttribute("src"); v.load();
+  $("#player").classList.remove("on");
+  $("header").inert = $("#app").inert = false;
+  playerReset();
+  // アプリ版: 動画に合わせたウィンドウの大きさを元に戻す。全画面から戻るときは、
+  // desktop.py 側が全画面の解除を待ってから戻す（先に戻すと全画面前の大きさで上書きされる）
+  const api = desktop();
+  if(api && api.restore_window) api.restore_window();
+}
+// 全画面の切り替え。全画面にするのは動画の部分だけ（YouTube と同じく下の情報バーは隠れる）
+const goFullscreen = () => {
+  if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else $("#stage").requestFullscreen().catch(() => {});
+};
+
+async function rescan(){
+  $("#scanBtn").disabled = true;
+  await fetch("/api/scan", {method:"POST"});
+  const t = setInterval(async () => {
+    const s = await (await fetch("/api/scan/status")).json();
+    $("#scanBtn").textContent = s.running ? "走査 " + s.done + "/" + s.total : "再スキャン";
+    if(!s.running){ clearInterval(t); $("#scanBtn").disabled = false; load(); }
+  }, 600);
+}
+
+// quiet … プレイヤーから呼ぶとき。右下の「変換ジョブ」パネルを開かない（操作バーに重なるため）
+async function convert(id, quiet){
+  const r = await fetch("/api/jobs", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({video_id:id})});
+  if(!r.ok){ toast("120fps化のジョブを登録できませんでした", true); return false; }
+  if(!quiet) $("#jobs").classList.add("on");
+  load();
+  return true;
+}
+
+function renderJobs(){
+  const list = Object.values(state.jobs).sort((a,b) => b.id - a.id);
+  $("#joblist").innerHTML = list.length ? list.map(j =>
+    '<div class="job ' + j.status + '">' +
+      '<div class="n">' + esc(j.name) + "</div>" +
+      '<div class="m">' + esc(j.message || "") +
+        (j.note ? " / " + esc(j.note) : "") + "</div>" +
+      '<div class="track"><i style="width:' + (j.progress*100).toFixed(1) + '%"></i></div>' +
+    "</div>").join("")
+    : '<div class="m">ジョブはありません</div>';
+}
+
+// ───────── ⋮ メニュー（フォルダへ移動・ごみ箱へ移動など。一覧でもプレイヤーでも使える）─────────
+const menu = {el: null, anchor: null};
+
+function closeMenu(){
+  if(menu.el) menu.el.remove();
+  if(menu.anchor) menu.anchor.classList.remove("open");
+  menu.el = menu.anchor = null;
+}
+
+function menuItems(v, inPlayer){
+  // ライブラリの外の動画（エクスプローラーから開いたもの）は、移動・削除はさせない
+  if(v.external) return [{icon: ICON.folder, label: "エクスプローラーで表示", run: () => revealVideo(v)}];
+  const it = [];
+  if(!inPlayer) it.push({icon: ICON.play, label: "再生", run: () => openVideo(v.id)});
+  if(!inPlayer && state.features.fps120 && !v.is_converted && !v.converted_id && !v.job)
+    it.push({icon: ICON.fps, label: "120fps化", run: () => convert(v.id)});
+  if(it.length) it.push("-");
+  it.push({icon: ICON.move, label: "フォルダへ移動…", run: () => moveVideo(v)});
+  it.push({icon: ICON.folder, label: "エクスプローラーで表示", run: () => revealVideo(v)});
+  it.push("-");
+  it.push({icon: ICON.trash, label: "ごみ箱へ移動", danger: true, run: () => deleteVideo(v)});
+  return it;
+}
+
+// pos は {anchor: ⋮ボタン} か {x, y}（右クリックした位置）
+function openMenu(v, pos, inPlayer){
+  closeMenu();
+  const m = document.createElement("div");
+  m.className = "menu";
+  m.setAttribute("role", "menu");
+  menuItems(v, inPlayer).forEach(it => {
+    if(it === "-"){ m.appendChild(document.createElement("hr")); return; }
+    const b = document.createElement("button");
+    b.setAttribute("role", "menuitem");
+    if(it.danger) b.className = "danger";
+    b.innerHTML = it.icon + "<span>" + esc(it.label) + "</span>";
+    b.onclick = e => { e.stopPropagation(); closeMenu(); it.run(); };
+    m.appendChild(b);
+  });
+  // 全画面中は、全画面になっている要素の外に置くと見えない
+  (document.fullscreenElement || document.body).appendChild(m);
+  const r = m.getBoundingClientRect();
+  let x = pos.x, y = pos.y;
+  if(pos.anchor){
+    const a = pos.anchor.getBoundingClientRect();
+    x = a.right - r.width;
+    y = a.bottom + 4;
+    if(y + r.height > innerHeight - 8) y = a.top - r.height - 4;   // 下に収まらなければ上に開く
+    pos.anchor.classList.add("open");
+    menu.anchor = pos.anchor;
+  } else {
+    if(x + r.width > innerWidth - 8) x -= r.width;
+    if(y + r.height > innerHeight - 8) y -= r.height;
+  }
+  m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + "px";
+  menu.el = m;
+}
+
+function toggleMenu(v, btn, inPlayer){
+  if(menu.anchor === btn){ closeMenu(); return; }
+  openMenu(v, {anchor: btn}, inPlayer);
+}
+
+// 外側を押したら閉じる。mousedown ではなく pointerdown で見る
+// （シークバーは pointerdown を preventDefault するので mousedown が来ず、閉じなかった）
+document.addEventListener("pointerdown", e => {
+  if(menu.el && !menu.el.contains(e.target) && !(menu.anchor && menu.anchor.contains(e.target))){
+    closeMenu();
+    menu.dismissedAt = performance.now();   // 閉じるためのクリックで動画が再生/停止しないように
+  }
+}, true);
+$("main").addEventListener("scroll", closeMenu, {passive: true});
+window.addEventListener("resize", closeMenu);
+document.addEventListener("fullscreenchange", closeMenu);
+
+// ───────── ダイアログ・通知・API ─────────
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  if(text !== undefined) e.textContent = text;
+  return e;
+};
+
+// onOk が例外を投げたら、閉じずにダイアログ内にエラーを出す（やり直せるように）
+function openDialog({title, body, okLabel = "OK", okClass = "primary", onOk, onOpen, focus}){
+  closeMenu();
+  if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  return new Promise(resolve => {
+    const wrap = el("div", "modal");
+    wrap.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3></h3>' +
+      '<div class="body"></div><p class="err"></p><div class="acts">' +
+      '<button class="tool" data-a="cancel">キャンセル</button>' +
+      '<button class="tool" data-a="ok"></button></div></div>';
+    wrap.querySelector("h3").textContent = title;
+    wrap.querySelector(".body").append(...body);
+    const ok = wrap.querySelector('[data-a="ok"]');
+    const err = wrap.querySelector(".err");
+    ok.textContent = okLabel;
+    ok.classList.add(okClass);
+    let busy = false;
+    const close = val => {
+      document.removeEventListener("keydown", onKey, true);
+      wrap.remove();
+      resolve(val);
+    };
+    const submit = async () => {
+      if(busy || ok.disabled) return;
+      busy = true;
+      err.textContent = "";
+      ok.disabled = true;
+      ok.textContent = "処理中…";
+      try {
+        close(onOk ? await onOk() : true);
+      } catch(e){
+        err.textContent = e.message;
+        ok.textContent = okLabel;
+        ok.disabled = false;
+        busy = false;
+      }
+    };
+    const onKey = e => {
+      if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); if(!busy) close(null); }
+      else if(e.key === "Enter" && !e.isComposing && e.target.tagName !== "BUTTON"){
+        e.preventDefault(); submit();
+      }
+    };
+    ok.onclick = submit;
+    wrap.querySelector('[data-a="cancel"]').onclick = () => { if(!busy) close(null); };
+    wrap.addEventListener("mousedown", e => { if(e.target === wrap && !busy) close(null); });
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(wrap);
+    if(onOpen) onOpen(ok);
+    (focus ? wrap.querySelector(focus) : ok).focus();
+  });
+}
+
+let toastTimer = 0;
+function toast(msg, isErr){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "on" + (isErr ? " err" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = isErr ? "err" : ""; }, isErr ? 6000 : 3500);
+}
+
+async function api(method, url, body){
+  const r = await fetch(url, {method, headers: {"Content-Type": "application/json"},
+                              body: body === undefined ? undefined : JSON.stringify(body)});
+  let data = null;
+  try { data = await r.json(); } catch(e){ /* 本文なし */ }
+  if(!r.ok)
+    throw new Error(data && typeof data.detail === "string" ? data.detail : "エラー（HTTP " + r.status + "）");
+  return data;
+}
+
+// 再生中の動画はサーバがファイルを開いているので、移動・削除の前に手放す
+function releasePlayback(id){
+  const v = $("#v");
+  if(!$("#player").classList.contains("on") || !state.current || state.current.id !== id) return null;
+  const s = {t: v.currentTime, paused: v.paused};
+  v.pause(); v.removeAttribute("src"); v.load();
+  return s;
+}
+function restorePlayback(s, id){
+  if(!s) return;
+  const src = "/media/" + id;
+  $("#v").src = src;
+  // 読み込み前に閉じて別の動画を開いたとき、その動画を古い位置へ飛ばさないよう src を確かめる
+  seekWhenReady(src, s.t, !s.paused);
+}
+
+// ───────── 各操作 ─────────
+async function moveVideo(v){
+  let dirs;
+  try { dirs = await api("GET", "/api/dirs"); }
+  catch(e){ toast("フォルダの一覧を取得できませんでした: " + e.message, true); return; }
+
+  const here = v.path.slice(0, v.path.lastIndexOf("\\")).toLowerCase();
+  let sel = null, ok = null;
+  const filter = el("input");
+  filter.type = "text";
+  filter.placeholder = "フォルダを絞り込み";
+  const list = el("div", "dirlist");
+  const nf = el("input");
+  nf.type = "text";
+  nf.placeholder = "新しいフォルダ名（任意）— 選んだフォルダの中に作って移動します";
+  const dest = el("div", "hint");
+  const pair = v.converted_id ? "変換済み版（120fps）も一緒に移動します。"
+             : v.is_converted ? "元の動画が同じフォルダにあれば、一緒に移動します。" : "";
+
+  const update = () => {
+    const name = nf.value.trim();
+    const same = sel && sel.path.toLowerCase() === here && !name;
+    if(ok) ok.disabled = !sel || same;
+    dest.textContent = !sel ? "移動先のフォルダを選んでください。" + (pair ? "\n" + pair : "")
+      : same ? "今と同じフォルダです。"
+      : "移動先: " + sel.label + (name ? "\\" + name + "（新規作成）" : "") + (pair ? "\n" + pair : "");
+  };
+  const draw = () => {
+    const q = filter.value.trim().toLowerCase();
+    list.innerHTML = "";
+    dirs.filter(d => !q || d.label.toLowerCase().includes(q)).forEach(d => {
+      const b = el("button", "dir" + (sel === d ? " sel" : ""));
+      const depth = d.rel ? d.rel.split("\\").length - 1 : 0;
+      // 絞り込み中はフルパス、通常は字下げ＋フォルダ名で階層を表す
+      const name = q || !d.rel ? d.label : d.rel.split("\\").pop();
+      b.style.paddingLeft = (10 + (q ? 0 : depth * 16)) + "px";
+      b.title = d.label;
+      b.innerHTML = '<span class="lb">' + esc(name) +
+        (d.path.toLowerCase() === here ? " <i>（今の場所）</i>" : "") + "</span>" +
+        '<span class="n">' + (d.count || "") + "</span>";
+      b.onclick = () => { sel = d; draw(); update(); };
+      b.ondblclick = () => { sel = d; update(); if(ok && !ok.disabled) ok.click(); };
+      list.appendChild(b);
+    });
+    if(!list.children.length) list.appendChild(el("div", "hint", "該当するフォルダがありません"));
+  };
+  filter.oninput = draw;
+  nf.oninput = update;
+  draw();
+  update();
+
+  const r = await openDialog({
+    title: "フォルダへ移動",
+    body: [el("div", "fname", v.name + "（今の場所: " + (v.rel_dir || "ライブラリの直下") + "）"),
+           filter, list, nf, dest],
+    okLabel: "移動",
+    focus: "input",
+    onOpen: b => { ok = b; update(); },
+    onOk: async () => {
+      const s = releasePlayback(v.id);
+      try {
+        const res = await api("POST", "/api/videos/" + v.id + "/move",
+                              {dest: sel.path, new_folder: nf.value.trim()});
+        restorePlayback(s, v.id);
+        return res;
+      } catch(e){
+        restorePlayback(s, v.id);
+        throw e;
+      }
+    },
+  });
+  if(!r) return;
+  toast("「" + v.name + "」を「" + (r.rel_dir || "ライブラリの直下") + "」へ移動しました" +
+        (r.moved.length > 1 ? "（120fps版も一緒に）" : ""));
+  await load();
+  if(state.current && state.current.id === v.id){
+    state.current = state.videos.find(x => x.id === v.id) || state.current;
+    setPlayerInfo(state.current);
+  }
+}
+
+async function deleteVideo(v){
+  const note = "Windowsのごみ箱へ移動します（ごみ箱から元に戻せます）。" +
+    (v.converted_id ? "\n変換済み版（120fps）は残ります。" : "");
+  const r = await openDialog({
+    title: "ごみ箱へ移動しますか？",
+    body: [el("div", "fname", v.name), el("div", "hint", note)],
+    okLabel: "ごみ箱へ移動",
+    okClass: "danger",
+    focus: '[data-a="cancel"]',        // Enter の押し間違いで消さないよう、既定はキャンセル
+    onOk: async () => {
+      const s = releasePlayback(v.id);
+      try {
+        return await api("POST", "/api/videos/" + v.id + "/delete");
+      } catch(e){
+        restorePlayback(s, v.id);
+        throw e;
+      }
+    },
+  });
+  if(!r) return;
+  if(state.current && state.current.id === v.id) closePlayer();
+  toast("「" + v.name + "」をごみ箱へ移動しました");
+  load();
+}
+
+async function revealVideo(v){
+  try { await api("POST", "/api/videos/" + v.id + "/reveal"); }
+  catch(e){ toast("エクスプローラーで開けませんでした: " + e.message, true); }
+}
+
+
+$("#searchForm").onsubmit = e => { e.preventDefault(); state.q = $("#q").value.trim(); load(); };
+$("#filterBtn").onclick = () => {
+  state.unconverted = !state.unconverted;
+  $("#filterBtn").textContent = state.unconverted ? "未変換のみ" : "すべて";
+  load();
+};
+$("#scanBtn").onclick = rescan;
+$("#jobsBtn").onclick = () => $("#jobs").classList.toggle("on");
+$("#jobsClose").onclick = () => $("#jobs").classList.remove("on");
+
+document.addEventListener("keydown", e => {
+  if(menu.el){                          // メニューが開いている間はメニューの操作だけ
+    const items = [...menu.el.querySelectorAll("button")];
+    const i = items.indexOf(document.activeElement);
+    if(e.key === "Escape"){ e.preventDefault(); const a = menu.anchor; closeMenu(); if(a) a.focus(); }
+    else if(e.key === "ArrowDown"){ e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if(e.key === "ArrowUp"){ e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    return;
+  }
+  // ダイアログの入力欄で「f」を打って全画面になる、などを防ぐ（音量スライダーは除く）
+  if(document.querySelector(".modal") || e.target.closest("input:not([type=range]), textarea")) return;
+  if(!$("#player").classList.contains("on")) return;
+  if(e.key === "Escape" && $("#ytSettings").classList.contains("on")){ closeSettings(); return; }
+  if(e.key === "Escape" && !document.fullscreenElement){ closePlayer(); return; }
+  playerKey(e);
+});
+
+// ───────── プレイヤーの操作バー（YouTube 風）─────────
+// カーソルを動かすと表示し、再生中に 2.5 秒動かさなければ隠す。一時停止中は出したまま。
+const V = $("#v"), STAGE = $("#stage");
+const E = {
+  ctl: $("#ytCtl"), prog: $("#ytProg"), play: $("#ytPlay"), mute: $("#ytMute"), vol: $("#ytVol"),
+  volume: $("#ytVolume"), cur: $("#ytCur"), dur: $("#ytDur"), set: $("#ytSet"), fs: $("#ytFs"),
+  settings: $("#ytSettings"), bezel: $("#ytBezel"), bubble: $("#ytBubble"), err: $("#ytErr"),
+  bar: $("#ytProg .play"), buf: $("#ytProg .buf"), hov: $("#ytProg .hov"),
+  knob: $("#ytProg .yt-knob"), tip: $("#ytProg .yt-tip"), top: $("#ytTop"), back: $("#ytBack"),
+  boost: $("#ytBoost"), speed: $("#ytSpeed"), fps: $("#ytFps"),
+};
+const P = {idleTimer: 0, bubbleTimer: 0, seekTimer: 0, raf: 0, overCtl: false, drag: null, lastSeek: 0,
+           speed: 1, lastSpeed: 1.5, page: "main", mx: -1, my: -1,
+           boost: 1, lastBoost: 2, audio: null, fpsBtnState: null};
+const SPEED_MIN = 0.25, SPEED_MAX = 3;
+const BOOSTS = [1, 1.5, 2, 2.5, 3, 4];     // 音量ブーストの倍率（1 = オフ）
+const YT = {
+  play: svg("M8 5v14l11-7z"),
+  pause: svg("M6 19h4V5H6v14zm8-14v14h4V5h-4z"),
+  replay: svg("M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"),
+  volHigh: svg("M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"),
+  volLow: svg("M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"),
+  volOff: svg("M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"),
+  gear: svg("M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"),
+  fsOn: svg("M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"),
+  fsOff: svg("M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"),
+  back: svg("M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"),
+  arrowBack: svg("M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"),
+  // 音量ブースト: 左右の音波 ((ϟ)) に稲妻
+  boost: svg("M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41zm8.48 0A5.98 5.98 0 0 0 18 12c0-1.66-.67-3.16-1.76-4.24l-1.42 1.42A3.99 3.99 0 0 1 16 12c0 1.1-.45 2.1-1.17 2.83l1.41 1.41zM20 12c0 2.21-.9 4.21-2.35 5.65l1.42 1.42A9.95 9.95 0 0 0 22 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42A7.96 7.96 0 0 1 20 12zM6.35 6.35 4.93 4.93A9.95 9.95 0 0 0 2 12c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.96 7.96 0 0 1 4 12c0-2.21.9-4.21 2.35-5.65zM12.9 7.2l-3.3 5.3h2.1l-.8 4.3 3.5-5.8h-2.2z"),
+  speed: svg("M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.27-10.44zm-9.79 6.84a2 2 0 0 0 2.83 0l5.66-8.49-8.49 5.66a2 2 0 0 0 0 2.83z"),
+};
+
+const fmtTime = s => {
+  if(!isFinite(s) || s < 0) s = 0;
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  const pad = n => String(n).padStart(2, "0");
+  return h ? h + ":" + pad(m) + ":" + pad(x) : m + ":" + pad(x);
+};
+const playerOn = () => $("#player").classList.contains("on");
+// 詰め替え配信（mkv 等）は長さが分からないので索引の値を使う
+const duration = () => (isFinite(V.duration) && V.duration > 0) ? V.duration
+                     : ((state.current && state.current.duration) || 0);
+const canSeek = () => !!(state.current && state.current.native) && isFinite(V.duration) && V.duration > 0;
+
+// ---- 表示の更新 ----
+function drawProgress(){
+  const d = duration(), t = P.drag ? P.drag.t : V.currentTime;
+  const pct = d ? Math.min(1, Math.max(0, t / d)) * 100 : 0;
+  E.bar.style.width = pct + "%";
+  E.knob.style.left = pct + "%";
+  let buf = 0;
+  for(let i = 0; i < V.buffered.length; i++)
+    if(V.buffered.start(i) <= V.currentTime + 1) buf = Math.max(buf, V.buffered.end(i));
+  E.buf.style.width = (d ? Math.min(1, buf / d) * 100 : 0) + "%";
+  E.cur.textContent = fmtTime(t);
+  E.dur.textContent = fmtTime(d);
+  E.prog.setAttribute("aria-valuemax", Math.round(d));
+  E.prog.setAttribute("aria-valuenow", Math.round(t));
+  E.prog.setAttribute("aria-valuetext", fmtTime(t) + " / " + fmtTime(d));
+}
+function drawPlayBtn(){
+  // シークバーをドラッグしている間は一時停止しているが、離せば再生に戻るので ▶ にしない
+  const paused = V.paused && !(P.drag && P.drag.wasPlaying);
+  const icon = V.ended ? YT.replay : paused ? YT.play : YT.pause;
+  const tip = V.ended ? "もう一度見る" : paused ? "再生（k）" : "一時停止（k）";
+  E.play.innerHTML = icon;
+  E.play.dataset.tip = tip;
+  E.play.setAttribute("aria-label", tip);
+}
+function drawVolume(){
+  const lv = V.muted ? 0 : V.volume;
+  E.mute.innerHTML = lv === 0 ? YT.volOff : lv < 0.5 ? YT.volLow : YT.volHigh;
+  E.mute.dataset.tip = lv === 0 ? "ミュート解除（m）" : "ミュート（m）";
+  E.mute.setAttribute("aria-label", E.mute.dataset.tip);
+  E.volume.value = lv;
+  E.volume.style.setProperty("--p", lv * 100 + "%");
+  E.volume.setAttribute("aria-valuetext", Math.round(lv * 100) + "%");
+}
+function drawFs(){
+  const on = !!document.fullscreenElement;
+  E.fs.innerHTML = on ? YT.fsOff : YT.fsOn;
+  E.fs.dataset.tip = on ? "全画面の終了（f）" : "全画面（f）";
+  E.fs.setAttribute("aria-label", E.fs.dataset.tip);
+}
+function flash(icon){                    // 中央に一瞬出るアイコン
+  E.bezel.innerHTML = icon;
+  E.bezel.classList.remove("show");
+  void E.bezel.offsetWidth;              // アニメーションを最初からやり直させる
+  E.bezel.classList.add("show");
+}
+function bubble(text){                   // 上に出る短い表示（音量・秒数・速度）
+  E.bubble.textContent = text;
+  E.bubble.classList.add("show");
+  clearTimeout(P.bubbleTimer);
+  P.bubbleTimer = setTimeout(() => E.bubble.classList.remove("show"), 700);
+}
+
+// 再生中は requestAnimationFrame で進捗を描く（timeupdate は毎秒4回ほどしか来ず、120fps だとカクつく）
+function tick(){
+  P.raf = 0;
+  drawProgress();
+  if(!V.paused && !V.error && playerOn()) P.raf = requestAnimationFrame(tick);
+}
+const startTick = () => { if(!P.raf) P.raf = requestAnimationFrame(tick); };
+
+// ---- 表示・非表示 ----
+function ytShow(){
+  STAGE.classList.remove("idle");
+  clearTimeout(P.idleTimer);
+  P.idleTimer = setTimeout(ytMaybeHide, 2500);
+}
+function ytMaybeHide(){
+  if(!playerOn() || V.paused || P.overCtl || P.drag || settingsOpen()) return;
+  if(STAGE.classList.contains("error")) return;        // エラー中は「←」で戻れるよう出したまま
+  const a = document.activeElement;                    // キーボードで操作バーを触っている間も
+  if(a && STAGE.contains(a) && a.matches(":focus-visible")) return;
+  STAGE.classList.add("idle");
+}
+function playerReset(){
+  clearTimeout(P.idleTimer);
+  clearTimeout(P.seekTimer);
+  cancelAnimationFrame(P.raf);
+  P.raf = 0;
+  P.drag = null;
+  P.mx = P.my = -1;
+  V.loop = false;                        // ループは動画ごと（YouTube と同じく次の動画には持ち越さない）
+  closeSettings(true);
+  STAGE.classList.remove("idle", "waiting", "error");
+  E.prog.classList.remove("drag");
+  E.prog.classList.add("noseek");        // 長さが分かるまではシークさせない
+  E.bar.style.width = E.buf.style.width = "0%";
+  E.knob.style.left = "0%";
+  E.cur.textContent = "0:00";
+  E.dur.textContent = fmtTime(state.current && state.current.duration);
+  drawPlayBtn();
+  drawVolume();
+  drawFs();
+}
+
+// ---- 操作 ----
+function togglePlay(){
+  if(V.paused || V.ended){
+    if(V.ended){
+      if(canSeek()) V.currentTime = 0;
+      else V.load();                     // シークできない形式は読み込み直して頭から
+    }
+    V.play().catch(() => {});
+    flash(YT.play);
+  } else {
+    V.pause();
+    flash(YT.pause);
+  }
+}
+function seekTo(t, label){
+  if(!canSeek()){
+    // mp4 でも読み込みが済むまではシークできない。そのときは黙って無視する
+    if(state.current && !state.current.native) bubble("この形式はシークできません");
+    return;
+  }
+  V.currentTime = Math.max(0, Math.min(t, duration() - 0.05));
+  if(label) bubble(label);
+  drawProgress();
+}
+const seekBy = d => seekTo(V.currentTime + d, (d > 0 ? "+" : "−") + Math.abs(d) + " 秒");
+function stepFrame(dir){                 // 一時停止中のコマ送り（, と .）
+  const fps = (state.current && state.current.fps) || 30;
+  seekTo(V.currentTime + dir / fps);
+}
+function setVolume(x, show){
+  x = Math.max(0, Math.min(1, Math.round(x * 100) / 100));
+  V.volume = x;
+  V.muted = x === 0;
+  if(show) bubble(Math.round(x * 100) + "%");
+}
+function toggleMute(){
+  if(V.muted || V.volume === 0){
+    V.muted = false;
+    if(V.volume === 0) V.volume = 0.5;
+  } else {
+    V.muted = true;
+  }
+}
+// ---- 再生速度（右下の速度ボタン。ホイールの上下ですぐ変えられる）----
+const fmtSpeed = r => r === 1 ? "標準" : (Math.round(r * 100) / 100) + "x";
+function setSpeed(r, show){
+  r = Math.round(Math.max(SPEED_MIN, Math.min(SPEED_MAX, r)) * 100) / 100;
+  if(r !== 1) P.lastSpeed = r;           // クリックで「標準 ⇔ 直前の速度」を切り替えるため
+  P.speed = r;
+  V.defaultPlaybackRate = r;             // 次の動画を開いても同じ速度のまま
+  V.playbackRate = r;
+  if(show) bubble(fmtSpeed(r));
+  drawSpeed();
+}
+// step … 0.25 刻み（ホイール・< >）。Shift を押しながらのホイールは 0.05 刻み
+function shiftSpeed(dir, step = 0.25){
+  // 半端な値（1.3 など）からでも、次の刻み（上なら 1.5、下なら 1.25）に乗せる
+  const n = P.speed / step;
+  setSpeed((dir > 0 ? Math.floor(n + 1e-9) + 1 : Math.ceil(n - 1e-9) - 1) * step, true);
+}
+function drawSpeed(){
+  // 数値はアイコンの横に出さない（操作バーを簡潔に保つため）。標準以外は色で示し、値はツールチップと変更時の表示で見せる
+  E.speed.innerHTML = YT.speed;
+  E.speed.classList.toggle("on", P.speed !== 1);
+  E.speed.dataset.tip = "再生速度 " + fmtSpeed(P.speed) + "（ホイールで変更・クリックで" +
+                        (P.speed !== 1 ? "標準に戻す" : fmtSpeed(P.lastSpeed) + "にする") + "）";
+  E.speed.setAttribute("aria-label", "再生速度 " + fmtSpeed(P.speed));
+}
+
+// ---- 音量ブースト（100% を超えて大きくする。Web Audio で増幅し、音割れしないようリミッターを通す）----
+function audioChain(){
+  if(P.audio) return P.audio;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if(!Ctx) return null;
+  const ctx = new Ctx();
+  // 一度つなぐと、この <video> の音はずっと Web Audio 経由になる（外せない仕様）
+  const src = ctx.createMediaElementSource(V);
+  const gain = ctx.createGain();
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -2;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.25;
+  src.connect(gain);
+  gain.connect(limiter);
+  limiter.connect(ctx.destination);
+  // ホイールは「ユーザー操作」扱いされないので、ホイールで初めて上げると停止状態で作られることがある。
+  // その間は音が出ないので、次のクリックかキー入力で動かす
+  if(ctx.state !== "running"){
+    const kick = () => ctx.resume();
+    document.addEventListener("pointerdown", kick, {once: true, capture: true});
+    document.addEventListener("keydown", kick, {once: true, capture: true});
+  }
+  P.audio = {ctx, gain, src};
+  return P.audio;
+}
+function setBoost(x, show){
+  x = Math.max(1, Math.min(BOOSTS[BOOSTS.length - 1], x));
+  if(x > 1) P.lastBoost = x;
+  const a = (x > 1 || P.audio) ? audioChain() : null;   // 一度も上げていなければ Web Audio は使わない
+  if(x > 1 && !a){ bubble("この環境では音量ブーストを使えません"); return; }
+  P.boost = x;
+  if(a){
+    if(a.ctx.state === "suspended") a.ctx.resume();
+    a.gain.gain.setTargetAtTime(x, a.ctx.currentTime, 0.02);
+  }
+  if(show) bubble(x > 1 ? "音量ブースト " + Math.round(x * 100) + "%" : "音量ブースト オフ");
+  drawBoost();
+}
+function shiftBoost(dir){
+  let i = BOOSTS.findIndex(b => b >= P.boost - 1e-9);
+  if(i < 0) i = BOOSTS.length - 1;
+  setBoost(BOOSTS[Math.max(0, Math.min(BOOSTS.length - 1, i + dir))], true);
+}
+function drawBoost(){
+  const on = P.boost > 1;
+  E.boost.innerHTML = YT.boost;          // 速度ボタンと同じく数値は出さず、オンのときは色だけ変える
+  E.boost.classList.toggle("on", on);
+  E.boost.dataset.tip = "音量ブースト " + (on ? Math.round(P.boost * 100) + "%" : "オフ") +
+                        "（ホイールで変更・クリックで" + (on ? "オフ" : Math.round(P.lastBoost * 100) + "%") + "）";
+  E.boost.setAttribute("aria-label", E.boost.dataset.tip);
+}
+
+// ---- 120fps ボタン（変換・変換中の進み具合・120fps版と元の動画の切り替え）----
+function activeJob(id){
+  return Object.values(state.jobs).find(j => j.video_id === id &&
+                                        (j.status === "queued" || j.status === "running"));
+}
+function originalOf(v){                  // 120fps版の元の動画（一覧に読み込まれていれば）
+  return state.videos.find(x => x.converted_id === v.id) || null;
+}
+function drawRightButtons(){
+  drawSpeed();
+  drawBoost();
+  const v = state.current;
+  // ライブラリの外の動画・再生できない動画には 120 ボタンを出さない
+  if(!v || v.external || v.playable === 0 || !state.features.fps120){ E.fps.hidden = true; return; }
+  const job = activeJob(v.id);
+  const orig = v.is_converted ? originalOf(v) : null;
+  const conv = v.converted_id ? state.videos.find(x => x.id === v.converted_id) : null;
+  let label = "120", tip, cls = "";
+  if(v.is_converted){
+    cls = "on";
+    tip = orig ? "120fps版を再生中（クリックで元の動画へ・同じ位置から）" : "120fps版を再生中";
+  } else if(conv){
+    tip = "120fps版に切り替え（同じ位置から）";
+  } else if(job){
+    cls = "busy";
+    label = job.status === "queued" ? "待機" : Math.round(job.progress * 100) + "%";
+    tip = job.status === "queued" ? "120fps化の順番待ち" : "120fps化しています " + label;
+  } else {
+    tip = "120fps化する";
+  }
+  E.fps.hidden = false;
+  E.fps.className = "yb wide" + (cls ? " " + cls : "");
+  E.fps.innerHTML = "<span class='yt-fps'>" + label + "</span>";
+  E.fps.dataset.tip = tip;
+  E.fps.setAttribute("aria-label", tip);
+  P.fpsBtnState = job ? job.status : null;
+}
+// 120fps版 ⇔ 元の動画を、今の再生位置のまま切り替える（YouTube の画質切り替えのように）
+function switchVersion(target){
+  const at = V.currentTime, paused = V.paused;
+  openVideo(target.id, {at, paused});
+  bubble(target.is_converted ? "120fps版" : "元の動画");
+}
+async function onFpsButton(){
+  const v = state.current;
+  if(!v) return;
+  if(v.is_converted){
+    const orig = originalOf(v);
+    if(orig) switchVersion(orig);
+    return;
+  }
+  if(v.converted_id){
+    const conv = state.videos.find(x => x.id === v.converted_id);
+    if(conv) switchVersion(conv);
+    return;
+  }
+  if(activeJob(v.id)) return;
+  // 何時間もかかる処理なので、押し間違いで始めないよう確認する
+  const rate = state.features.minPerMin;           // config の CONVERTER_MIN_PER_MIN（無ければ目安は出さない）
+  const minutes = (v.duration && rate) ? Math.round(v.duration / 60 * rate) : null;
+  const ok = await openDialog({
+    title: "120fps化しますか？",
+    body: [el("div", "fname", v.name),
+           el("div", "hint", (minutes ? "目安: 約" + (minutes >= 60 ? Math.floor(minutes / 60) + "時間" +
+             (minutes % 60) + "分" : minutes + "分") + "（動画1分あたり約" + rate + "分）\n" : "") +
+             "変換中もこのまま見続けられます。できあがると、このボタンで切り替えられます。")],
+    okLabel: "120fps化する",
+  });
+  if(ok && await convert(v.id, true)) bubble("120fps化を開始しました");
+}
+
+// 音量はアプリを閉じても覚えておく（ブラウザ単位の小さな設定なので localStorage でよい）
+function loadPrefs(){
+  try {
+    const p = JSON.parse(localStorage.getItem("mlt.player") || "{}");
+    if(typeof p.volume === "number") V.volume = Math.max(0, Math.min(1, p.volume));
+    V.muted = !!p.muted;
+  } catch(e){ /* 保存できない環境では既定値のまま */ }
+}
+function savePrefs(){
+  try { localStorage.setItem("mlt.player", JSON.stringify({volume: V.volume, muted: V.muted})); }
+  catch(e){ /* 同上 */ }
+}
+
+// ---- 設定メニュー（ループ再生と、この動画に対する操作）----
+// 再生速度は右下の速度ボタンへ移した（ホイールですぐ変えられるように）
+const settingsOpen = () => E.settings.classList.contains("on");
+function drawSettings(page){
+  P.page = page;
+  const hadFocus = E.settings.contains(document.activeElement);   // 作り直す前に見ておく
+  E.settings.innerHTML = "";
+  const loop = el("button");
+  loop.setAttribute("role", "menuitemcheckbox");
+  loop.setAttribute("aria-checked", String(V.loop));
+  loop.innerHTML = "<span>ループ再生</span><span class='yt-switch" + (V.loop ? " on" : "") + "'></span>";
+  loop.onclick = e => { e.stopPropagation(); V.loop = !V.loop; drawSettings("main"); };
+  E.settings.appendChild(loop);
+  // この動画に対する操作（以前は下の情報バーと ⋮ にあったもの）
+  const v = state.current;
+  if(v && v.external){                   // ライブラリの外の動画は、表示するだけ
+    E.settings.append(el("hr"), settingsAction(ICON.folder, "エクスプローラーで表示", () => revealVideo(v)));
+  } else if(v){
+    E.settings.appendChild(el("hr"));
+    const fps = state.features.fps120 ? settingsFpsItem(v) : null;
+    if(fps) E.settings.appendChild(fps);
+    E.settings.append(
+      settingsAction(ICON.move, "フォルダへ移動…", () => moveVideo(v)),
+      settingsAction(ICON.folder, "エクスプローラーで表示", () => revealVideo(v)),
+      settingsAction(ICON.trash, "ごみ箱へ移動", () => deleteVideo(v), "danger"));
+  }
+  if(hadFocus) focusSettingsItem(0);
+}
+function focusSettingsItem(i){
+  const items = [...E.settings.querySelectorAll("button:not([disabled])")];
+  if(items.length) items[(i + items.length) % items.length].focus();
+}
+function settingsAction(icon, label, run, cls){
+  const b = el("button", "ic" + (cls ? " " + cls : ""));
+  b.setAttribute("role", "menuitem");
+  b.innerHTML = icon + "<span>" + esc(label) + "</span>";
+  b.onclick = e => { e.stopPropagation(); closeSettings(); run(); };
+  return b;
+}
+// 「120fps」の項目。操作バーの 120 ボタンと同じ動き（切り替え / 変換中の進み具合 / 変換）
+const fpsJobLabel = job => "120fps化（" + (job.status === "queued" ? "順番待ち"
+                           : "変換中 " + Math.round(job.progress * 100) + "%") + "）";
+function settingsFpsItem(v){
+  if(v.is_converted){
+    const orig = originalOf(v);
+    return orig ? settingsAction(ICON.fps, "元の動画に切り替え", () => switchVersion(orig)) : null;
+  }
+  if(v.converted_id){
+    const conv = state.videos.find(x => x.id === v.converted_id);
+    return conv ? settingsAction(ICON.fps, "120fps版に切り替え", () => switchVersion(conv)) : null;
+  }
+  const job = activeJob(v.id);
+  if(job){
+    const b = settingsAction(ICON.fps, fpsJobLabel(job), () => {});
+    b.disabled = true;
+    b.dataset.fpsJob = "1";
+    return b;
+  }
+  return settingsAction(ICON.fps, "120fps化…", onFpsButton);
+}
+function openSettings(){
+  drawSettings("main");
+  E.settings.classList.add("on");
+  STAGE.classList.add("settings-open");
+  E.set.setAttribute("aria-expanded", "true");
+  if(E.set.matches(":focus-visible")) focusSettingsItem(0);   // キーボードで開いたら中へ
+  ytShow();
+}
+function closeSettings(quiet){
+  if(!settingsOpen()) return;
+  const hadFocus = E.settings.contains(document.activeElement);
+  E.settings.classList.remove("on");
+  STAGE.classList.remove("settings-open");
+  E.set.setAttribute("aria-expanded", "false");
+  if(hadFocus) E.set.focus();            // フォーカスを歯車に戻す（見えない所へ消さない）
+  if(!quiet) ytShow();
+}
+
+// ---- キー操作（YouTube と同じ割り当て）----
+function playerKey(e){
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  const t = e.target;
+  // 設定メニューの中では、矢印キーは項目の移動、Space / Enter は項目を押す（動画は操作しない）
+  if(E.settings.contains(t)){
+    const items = [...E.settings.querySelectorAll("button:not([disabled])")];
+    const i = items.indexOf(t);
+    if(e.key === "ArrowDown"){ e.preventDefault(); focusSettingsItem(i + 1); }
+    else if(e.key === "ArrowUp"){ e.preventDefault(); focusSettingsItem(i - 1); }
+    return;
+  }
+  // 操作バーのボタンにキーボードでフォーカスしているときは、Enter でそのボタンを押す
+  if(e.key === "Enter" && t.closest("button")) return;
+  if(t === E.volume && e.key.startsWith("Arrow")) return;   // 音量スライダー自身の矢印キー
+  const d = duration();
+  switch(e.key){
+    case " ": case "k": case "K": togglePlay(); break;
+    case "ArrowLeft": seekBy(-5); break;
+    case "ArrowRight": seekBy(5); break;
+    case "j": case "J": seekBy(-10); break;
+    case "l": case "L": seekBy(10); break;
+    // ミュート中でも、覚えている音量から上げ下げする（0 から数え直して音量を失わないように）
+    case "ArrowUp": V.muted = false; setVolume(V.volume + 0.05, true); break;
+    case "ArrowDown":
+      if(V.muted) bubble("ミュート中");
+      else setVolume(V.volume - 0.05, true);
+      break;
+    case "m": case "M": toggleMute(); bubble(V.muted ? "ミュート" : Math.round(V.volume * 100) + "%"); break;
+    case "f": case "F": goFullscreen(); break;
+    case "Home": seekTo(0); break;
+    case "End": seekTo(d); break;
+    case ",": if(V.paused) stepFrame(-1); break;
+    case ".": if(V.paused) stepFrame(1); break;
+    case "<": shiftSpeed(-1); break;
+    case ">": shiftSpeed(1); break;
+    default:
+      if(/^[0-9]$/.test(e.key)) seekTo(d * Number(e.key) / 10);
+      else return;
+  }
+  e.preventDefault();
+  ytShow();
+}
+
+// ---- シークバー（クリック・ドラッグ・カーソル位置の時刻表示）----
+function progX(e){
+  const r = E.prog.getBoundingClientRect();
+  return {x: Math.min(Math.max(e.clientX - r.left, 0), r.width), w: r.width || 1};
+}
+E.prog.addEventListener("pointermove", e => {
+  if(!canSeek()) return;
+  const {x, w} = progX(e);
+  const t = x / w * duration();
+  E.hov.style.width = x + "px";
+  E.tip.textContent = fmtTime(t);
+  const half = E.tip.offsetWidth / 2;    // 端ではみ出さないように寄せる
+  E.tip.style.left = Math.min(Math.max(x, half), w - half) + "px";
+  if(P.drag){
+    P.drag.t = t;
+    drawProgress();
+    // ドラッグ中のシークは 150ms に1回へ間引く（ディスクに毎回シークさせない）。
+    // 間引いた分は最後に追いかけてシークし、止めた位置の絵が出るようにする
+    const wait = 150 - (performance.now() - P.lastSeek);
+    clearTimeout(P.seekTimer);
+    if(wait <= 0){ P.lastSeek = performance.now(); V.currentTime = t; }
+    else P.seekTimer = setTimeout(() => {
+      if(P.drag){ P.lastSeek = performance.now(); V.currentTime = P.drag.t; }
+    }, wait);
+  }
+});
+E.prog.addEventListener("pointerdown", e => {
+  if(!canSeek() || e.button !== 0) return;
+  e.preventDefault();
+  E.prog.setPointerCapture(e.pointerId);
+  const {x, w} = progX(e);
+  P.drag = {t: x / w * duration(), wasPlaying: !V.paused};
+  E.prog.classList.add("drag");
+  V.pause();
+  V.currentTime = P.drag.t;
+  P.lastSeek = performance.now();
+  drawProgress();
+});
+function endDrag(){
+  if(!P.drag) return;
+  clearTimeout(P.seekTimer);
+  const {t, wasPlaying} = P.drag;
+  P.drag = null;
+  E.prog.classList.remove("drag");
+  V.currentTime = t;
+  if(wasPlaying) V.play().catch(() => {});
+  drawProgress();
+  ytShow();
+}
+E.prog.addEventListener("pointerup", endDrag);
+E.prog.addEventListener("pointercancel", endDrag);
+E.prog.addEventListener("lostpointercapture", endDrag);
+
+// ---- ボタン ----
+E.back.innerHTML = YT.arrowBack;
+E.back.onclick = closePlayer;
+E.play.onclick = togglePlay;
+E.mute.onclick = () => toggleMute();
+E.fs.onclick = goFullscreen;
+E.set.innerHTML = YT.gear;
+E.set.onclick = e => { e.stopPropagation(); settingsOpen() ? closeSettings() : openSettings(); };
+// 音量ブースト・再生速度: クリックで オン/オフ（標準/直前の速度）、ボタンの上でホイールを回すと変わる
+E.boost.onclick = () => setBoost(P.boost > 1 ? 1 : P.lastBoost, true);
+E.speed.onclick = () => setSpeed(P.speed !== 1 ? 1 : P.lastSpeed, true);
+E.fps.onclick = onFpsButton;
+const onWheel = (fn) => e => {
+  e.preventDefault();                    // 画面のスクロールはさせない
+  if(!e.deltaY) return;
+  fn(e.deltaY < 0 ? 1 : -1, e);          // 上へ回す = 上げる
+  ytShow();
+};
+E.boost.addEventListener("wheel", onWheel(dir => shiftBoost(dir)), {passive: false});
+E.speed.addEventListener("wheel", onWheel((dir, e) => shiftSpeed(dir, e.shiftKey ? 0.05 : 0.25)),
+                         {passive: false});
+E.volume.addEventListener("input", () => setVolume(parseFloat(E.volume.value)));
+E.volume.addEventListener("pointerdown", () => E.vol.classList.add("drag"));
+document.addEventListener("pointerup", () => {
+  if(!E.vol.classList.contains("drag")) return;
+  E.vol.classList.remove("drag");
+  E.volume.blur();                       // 矢印キーをシーク操作に戻す
+});
+// 設定メニューの外を押したら閉じる（シークバーでも閉じるよう pointerdown で見る）
+document.addEventListener("pointerdown", e => {
+  if(settingsOpen() && !E.settings.contains(e.target) && !E.set.contains(e.target)){
+    closeSettings();
+    menu.dismissedAt = performance.now();
+  }
+}, true);
+
+// ---- 動画の上での操作 ----
+V.addEventListener("click", () => {
+  // メニューを閉じるために押したクリックでは、再生/一時停止を切り替えない（YouTube と同じ）
+  if(performance.now() - (menu.dismissedAt || 0) < 600) return;
+  togglePlay();
+});
+V.addEventListener("dblclick", goFullscreen);
+STAGE.addEventListener("contextmenu", e => {       // 右クリックでも ⋮ メニュー（操作バーの上でも）
+  if(E.settings.contains(e.target)) return;
+  e.preventDefault();
+  if(state.current) openMenu(state.current, {x: e.clientX, y: e.clientY}, true);
+});
+STAGE.addEventListener("focusin", ytShow);         // Tab で操作バーに来たら見えるようにする
+STAGE.addEventListener("mousemove", e => {
+  // 表示を切り替えただけでも Chrome は位置の変わらない mousemove を送ってくる。
+  // それで出し直すと「消えた直後にまた出る」を繰り返すので、実際に動いたときだけ反応する
+  if(e.screenX === P.mx && e.screenY === P.my) return;
+  P.mx = e.screenX; P.my = e.screenY;
+  ytShow();
+});
+STAGE.addEventListener("mouseleave", () => {
+  P.overCtl = false;
+  clearTimeout(P.idleTimer);
+  P.idleTimer = setTimeout(ytMaybeHide, 300);
+});
+// 操作バーや「←」にカーソルがある間は隠さない
+[E.ctl, E.back].forEach(x => {
+  x.addEventListener("mouseenter", () => { P.overCtl = true; });
+  x.addEventListener("mouseleave", () => { P.overCtl = false; ytShow(); });
+});
+
+// ---- 動画の状態に合わせて表示を更新 ----
+V.addEventListener("play", () => { drawPlayBtn(); startTick(); ytShow(); });
+V.addEventListener("pause", () => { drawPlayBtn(); drawProgress(); ytShow(); });
+V.addEventListener("ended", () => { drawPlayBtn(); ytShow(); });
+V.addEventListener("waiting", () => STAGE.classList.add("waiting"));
+["playing", "canplay", "seeked", "pause", "emptied"].forEach(ev =>
+  V.addEventListener(ev, () => STAGE.classList.remove("waiting")));
+V.addEventListener("loadstart", () => STAGE.classList.remove("error"));
+V.addEventListener("loadedmetadata", () => {
+  E.prog.classList.toggle("noseek", !canSeek());
+  drawProgress();
+  fitWindow();
+});
+// アプリ版: ウィンドウを動画の縦横比に合わせて、左右（上下）の黒帯をなくす。
+// 最大化・全画面のときは desktop.py 側で何もしない。一覧に戻ると元の大きさに戻る（closePlayer）
+function fitWindow(){
+  const api = desktop();
+  if(api && api.fit_window && V.videoWidth && V.videoHeight && !document.fullscreenElement)
+    api.fit_window(V.videoWidth, V.videoHeight);
+}
+V.addEventListener("durationchange", drawProgress);
+V.addEventListener("progress", () => { if(!P.raf) drawProgress(); });
+V.addEventListener("timeupdate", () => { if(!P.raf) drawProgress(); });
+V.addEventListener("volumechange", () => { drawVolume(); savePrefs(); });
+V.addEventListener("error", () => {
+  if(!V.getAttribute("src")) return;     // 移動・削除の前に手放したときのものは無視
+  const err = V.error;
+  E.err.textContent = "この動画を再生できませんでした" + (err ? "（エラー " + err.code + "）" : "");
+  STAGE.classList.add("error");
+  // 読み込み中の表示や進捗の描画を止め、操作バーと「←」を出したままにする
+  STAGE.classList.remove("waiting");
+  cancelAnimationFrame(P.raf);
+  P.raf = 0;
+  V.pause();
+  drawPlayBtn();
+  ytShow();
+});
+document.addEventListener("fullscreenchange", drawFs);
+
+loadPrefs();
+drawPlayBtn();
+drawVolume();
+drawFs();
+drawSpeed();
+drawBoost();
+
+// ---- アプリ版（desktop.py / pywebview）との連携。ブラウザで開いたときは何もしない ----
+const desktop = () => (window.pywebview && window.pywebview.api) || null;
+// WebView2 では要素の全画面化がウィンドウの枠の中だけで起きるので、ウィンドウごと全画面にする
+document.addEventListener("fullscreenchange", () => {
+  const api = desktop();
+  if(api && api.set_fullscreen) api.set_fullscreen(!!document.fullscreenElement);
+});
+// アプリ版は開発者ツールが見えないので、画面側のエラーを data/desktop.log に残す
+const clientLog = (level, msg) => {
+  const api = desktop();
+  if(api && api.client_log) api.client_log(level, msg);
+};
+window.addEventListener("error", e =>
+  clientLog("error", (e.message || "error") + " @" + (e.filename || "") + ":" + (e.lineno || "")));
+window.addEventListener("unhandledrejection", e => clientLog("error", "promise: " + e.reason));
+$("#v").addEventListener("error", () => {
+  const v = $("#v"), err = v.error;
+  if(v.getAttribute("src"))
+    clientLog("error", "video id=" + (state.current && state.current.id) +
+      " code=" + (err && err.code) + " " + (err && err.message || ""));
+});
+
+// 120fps 変換ツールが無い環境では、変換に関わるボタン（絞り込み・変換ジョブ・120）を出さない
+fetch("/api/features").then(r => r.json()).then(f => {
+  state.features = f;
+  $("#filterBtn").hidden = $("#jobsBtn").hidden = !f.fps120;
+  if(playerOn()) drawRightButtons();
+}).catch(() => { /* 取れなければ既定（出す）のまま */ });
+
+const es = new EventSource("/api/events");
+es.onmessage = e => {
+  const j = JSON.parse(e.data);
+  state.jobs[j.id] = j;
+  renderJobs();
+  const v = state.videos.find(x => x.id === j.video_id);
+  const mine = state.current && state.current.id === j.video_id && playerOn();
+  if(v){
+    v.job = (j.status === "queued" || j.status === "running") ? j : null;
+    if(j.status === "done"){
+      // 完了すると一覧を読み直す（変換済み版ができる）。再生中の動画なら 120 ボタンも更新
+      load().then(() => { if(mine){ drawRightButtons(); if(settingsOpen()) drawSettings("main"); } });
+      return;
+    }
+    render();
+  }
+  if(!mine) return;
+  // 進み具合の更新は毎秒何度も来る。メニューを作り直すと押しかけた項目が消えるので、
+  // 状態（待機→変換中→終了）が変わったときだけ作り直し、それ以外は数字だけ書き換える
+  const statusChanged = j.status !== P.fpsBtnState;
+  drawRightButtons();
+  if(settingsOpen()){
+    const item = E.settings.querySelector("[data-fps-job] span");
+    if(!statusChanged && item) item.textContent = fpsJobLabel(j);
+    else drawSettings("main");
+  }
+};
+
+load();
+</script>
+</body>
+</html>

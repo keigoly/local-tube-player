@@ -1,0 +1,12 @@
+# 個人の環境・データ（公開しない）
+config_local.py
+data/
+
+# ビルド成果物（launcher\build.cmd で作る）
+MyLocalTube.exe
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
