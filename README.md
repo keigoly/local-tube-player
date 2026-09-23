@@ -113,6 +113,9 @@ launcher\build.cmd
 | `library.py` | 走査・索引（SQLite）・コーデック判定・サムネイル作成 |
 | `fileops.py` | 移動・ごみ箱・エクスプローラーで表示 |
 | `jobs.py` | 120fps 変換ジョブの順番待ち（キュー） |
+| `osdeps.py` | OS ごとに違う処理の窓口。Windows では `platform_win.py`、それ以外では `platform_mac.py` を使う |
+| `platform_win.py` | Windows 用の処理（二重起動の防止・ダイアログ・ウィンドウの位置と大きさ・ごみ箱・エクスプローラーで表示・変換の停止） |
+| `platform_mac.py` | macOS 用の処理（準備中。今は呼ばれたことをログに残すだけの仮の実装） |
 | `config.py` / `config_local.example.py` | 設定の既定値 / 自分用の設定のひな形 |
 | `static/index.html` | 画面（ビルド不要の単一 HTML） |
 | `launcher/` | 起動用 exe のソース（C#）・アイコンの生成・既定のアプリへの登録 |
