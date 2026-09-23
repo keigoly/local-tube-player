@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/icon.png" width="128" alt="MyLocalTube のアイコン"></p>
+
 # MyLocalTube
 
 [![stars](https://img.shields.io/github/stars/keigoly/local-tube-player?style=flat&label=stars&color=29b6f6)](https://github.com/keigoly/local-tube-player/stargazers)

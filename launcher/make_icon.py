@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).resolve().parent.parent / "static" / "app.ico"
+README_PNG = OUT.parent.parent / "docs" / "images" / "icon.png"   # README の先頭に載せる
 SIZES = [16, 24, 32, 48, 64, 128, 256]
 BRAND = (41, 182, 246, 255)   # 水色。index.html の --brand と同じ色（YouTube の赤と区別する）
 SS = 4                         # 縁を滑らかにするための超解像倍率
@@ -39,6 +40,8 @@ def main():
     images[-1].save(OUT, format="ICO", sizes=[(n, n) for n in SIZES],
                     append_images=images[:-1])
     print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")
+    images[-1].save(README_PNG, format="PNG")
+    print(f"wrote {README_PNG} ({README_PNG.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":

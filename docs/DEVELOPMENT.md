@@ -6,6 +6,7 @@
 |---|---|
 | `images/*.png` | README に載せる画面写真（一覧・⋮メニュー・再生画面・⚙設定・フォルダへ移動） |
 | `make_screenshots.py` | 上の写真を撮り直すスクリプト |
+| `images/icon.png` | README の先頭のアイコン（256px）。写真ではなく `../launcher/make_icon.py` が `app.ico` と一緒に作る。直接編集しない |
 
 写真には **個人の動画を写さない**。`make_screenshots.py` はフリー素材（Blender Foundation のオープンムービー
 Big Buck Bunny・Sintel。どちらも CC BY 3.0。クレジットは README）を切り出してサンプル動画を作り、
