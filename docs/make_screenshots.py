@@ -1,7 +1,7 @@
 """README 用の画面写真（docs/images/*.png）を撮る。
 
-個人の動画が写り込まないよう、ffmpeg の合成映像（マンデルブロ・テストパターン等）で作った
-サンプル動画だけを並べた一時ライブラリで、専用のアプリ（使用中のアプリとは別の二重起動防止名・
+個人の動画が写り込まないよう、フリー素材（Blender Foundation のオープンムービー、CC BY）から
+切り出したサンプル動画だけを並べた一時ライブラリで、専用のアプリ（使用中のアプリとは別の二重起動防止名・
 ポート・データ置き場）を起動して撮る。撮影中は 30 秒ほどウィンドウが表示される。
 
     .venv\\Scripts\\python docs\\make_screenshots.py
@@ -30,30 +30,77 @@ LIB = WORK / "library"
 CDP_PORT = 9341
 WIN_W, WIN_H = 1440, 870
 
-# (フォルダ, 名前, lavfi の映像ソース, 秒数)
+# 素材: Blender Foundation のオープンムービー（どちらも CC BY 3.0）
+#   Big Buck Bunny  (c) copyright 2008, Blender Foundation / www.bigbuckbunny.org
+#   Sintel          (c) copyright Blender Foundation | durian.blender.org
+# Sintel は必要な部分だけを ffmpeg で切り出す。Big Buck Bunny は zip でしか配られていないので、
+# 初回だけ丸ごと（約 275MB）落としてキャッシュする。
+SINTEL = "https://download.blender.org/durian/movies/Sintel.2010.1080p.mkv"
+BBB_ZIP = "https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_30fps_normal.mp4.zip"
+BBB = "BBB"          # 下で実際のパスに置き換える
+# (フォルダ, 名前, 素材, 開始秒, 秒数, fps（None ならそのまま）)
+# サムネイルは動画の 18% の位置から作られるので、見せたい場面 − 秒数×0.18 を開始にしている
 SAMPLES = [
-    ("サンプル", "マンデルブロ集合をゆっくり拡大", "mandelbrot=s=1280x720:rate=30", 40),
-    ("サンプル", "グラデーションの流れ", "gradients=s=1280x720:speed=0.02:rate=30", 95),
-    ("サンプル", "テストパターン（HD）", "smptehdbars=s=1280x720:rate=30", 12),
-    ("サンプル", "ライフゲーム", "life=s=1280x720:mold=10:rate=30:ratio=0.1:death_color=#1e2a3a:life_color=#29b6f6", 180),
-    ("サンプル\\模様", "セルオートマトン", "cellauto=s=1280x720:rule=110:rate=30", 30),
-    ("サンプル\\模様", "シェルピンスキーの図形", "sierpinski=s=1280x720:rate=30", 25),
-    ("デモ", "カラーテスト", "testsrc2=s=1280x720:rate=60", 20),
-    ("デモ", "ゾーンプレート", "zoneplate=s=1280x720:rate=30:kt2=2:ky=2", 15),
-    ("デモ", "カラーテスト_120fps", "testsrc2=s=1280x720:rate=120", 20),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 1", BBB, 63, 40, None),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 2", BBB, 111, 50, None),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 3", BBB, 190, 30, None),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 4", BBB, 362, 45, None),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 5", BBB, 440, 25, None),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 6", BBB, 14, 35, None),
+    ("オープンムービー\\Sintel", "Sintel 抜粋 1", SINTEL, 333, 40, None),
+    ("オープンムービー\\Sintel", "Sintel 抜粋 2", SINTEL, 375, 30, None),
+    ("オープンムービー\\Sintel", "Sintel 抜粋 3", SINTEL, 735, 25, None),
+    ("オープンムービー\\Big Buck Bunny", "Big Buck Bunny 抜粋 2_120fps", BBB, 111, 50, 120),  # バッジ用
 ]
+
+
+def _bbb_path():
+    """Big Buck Bunny を用意する（初回だけ zip を落として取り出す）。"""
+    import urllib.request
+    import zipfile
+    mp4 = CACHE / "bbb_sunflower_1080p_30fps_normal.mp4"
+    if not mp4.exists():
+        z = CACHE / "bbb_sunflower_1080p_30fps_normal.mp4.zip"
+        if not z.exists():
+            print("  downloading Big Buck Bunny (~275MB, first time only)...")
+            urllib.request.urlretrieve(BBB_ZIP, z)
+        with zipfile.ZipFile(z) as f:
+            f.extract(mp4.name, CACHE)
+    return str(mp4)
+
+
+# 切り出した素材の置き場。次回からは使い回す（毎回ダウンロードしない）
+CACHE = Path(tempfile.gettempdir()) / "mlt_screenshot_clips"
+
+
+def _duration(path):
+    import library
+    return (library.probe(path)[0] or 0) if path.exists() else 0
 
 
 def make_library():
     ffmpeg = str(config.FFMPEG)
-    for folder, name, src, sec in SAMPLES:
+    CACHE.mkdir(exist_ok=True)
+    for folder, name, url, start, sec, fps in SAMPLES:
+        if url == BBB:
+            url = _bbb_path()
+        clip = CACHE / f"{name}_{start}_{sec}_{fps}.mp4"   # 場面を変えたら取り直すよう、条件も名前に入れる
+        # 1280x720 にそろえる（シネスコの作品は上下に帯を付ける）
+        vf = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2"
+        if fps:
+            vf += f",fps={fps}"
+        for attempt in range(3):              # 途中で切断されて短いファイルになったら取り直す
+            if _duration(clip) >= sec * 0.95:
+                break
+            subprocess.run([ffmpeg, "-v", "error", "-y", "-ss", str(start), "-i", url, "-t", str(sec),
+                            "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                            "-c:a", "aac", "-ac", "2", str(clip)], check=False)
+        if _duration(clip) < sec * 0.95:
+            sys.exit(f"素材を取得できませんでした: {name}（{url}）")
         d = LIB / folder
         d.mkdir(parents=True, exist_ok=True)
-        out = d / f"{name}.mp4"
-        subprocess.run([ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-i", f"{src},format=yuv420p",
-                        "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-                        "-t", str(sec), "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
-                        "-c:a", "aac", "-shortest", str(out)], check=True)
+        shutil.copy2(clip, d / f"{name}.mp4")
+        print(f"  clip: {name} ({_duration(clip):.0f}s)")
     print(f"sample library: {LIB}")
 
 
@@ -153,9 +200,9 @@ def shoot(window):
         cdp.js("closeMenu(); true")
 
         # 再生画面: 操作バーを出し、シークバーにカーソルを乗せた状態
-        cdp.js("V.muted = true; openVideo(state.videos.find(v => v.name.startsWith('マンデルブロ')).id); true")
+        cdp.js("V.muted = true; openVideo(state.videos.find(v => v.name === 'Big Buck Bunny 抜粋 2').id); true")
         wait_for(cdp, "V.readyState >= 3")
-        cdp.js("V.currentTime = 14; setBoost(1); true")
+        cdp.js("V.currentTime = 10; setBoost(1); true")
         time.sleep(2.5)
         x, y, w, h = cdp.box("#ytProg")
         cdp.move(x + w * 0.60, y + h / 2)     # 1回目は「乗った」だけで時刻表示が更新されないので2回動かす
@@ -175,7 +222,7 @@ def shoot(window):
         # フォルダへ移動のダイアログ（撮るだけで移動はしない）
         cdp.js("moveVideo(state.current); true")
         wait_for(cdp, "!!document.querySelector('.modal .dir')")
-        cdp.js("[...document.querySelectorAll('.modal .dir')].find(b => b.title.endsWith('模様')).click(); true")
+        cdp.js("[...document.querySelectorAll('.modal .dir')].find(b => b.title.endsWith('Sintel')).click(); true")
         time.sleep(0.6)
         printwindow(hwnd, OUT / "move.png")
         cdp.js("document.querySelector('.modal [data-a=cancel]').click(); true")

@@ -22,7 +22,7 @@ A Windows desktop app that plays your local video folders in a YouTube-like UI (
 | **⋮ メニュー（カードの右下・右クリック）** | **フォルダへ移動** |
 | ![⋮ メニュー](docs/images/menu.png) | ![フォルダへ移動](docs/images/move.png) |
 
-<sub>写真の動画はすべて ffmpeg で作ったサンプル映像（`docs/make_screenshots.py` で撮り直せる）。</sub>
+<sub>写真の映像は Blender Foundation のオープンムービー（Big Buck Bunny・Sintel、CC BY 3.0）の抜粋。クレジットは下の「ライセンス」。`docs/make_screenshots.py` で撮り直せる。</sub>
 
 ## できること
 
@@ -127,3 +127,10 @@ launcher\build.cmd
 ## ライセンス
 
 MIT（`LICENSE`）。YouTube は Google LLC の商標です。本プロジェクトは YouTube / Google とは関係ありません。
+
+README の画面写真に写っている映像（コードではなく写真のみ）:
+
+- *Big Buck Bunny* — (c) copyright 2008, Blender Foundation / [www.bigbuckbunny.org](https://peach.blender.org/) — [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
+- *Sintel* — (c) copyright Blender Foundation / [durian.blender.org](https://durian.blender.org/) — [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
+
+写真では一部を切り出し、1280x720 に縮小・余白を追加している。
