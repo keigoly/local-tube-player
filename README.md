@@ -1,9 +1,28 @@
 # MyLocalTube
 
+[![stars](https://img.shields.io/github/stars/keigoly/local-tube-player?style=flat&label=stars&color=29b6f6)](https://github.com/keigoly/local-tube-player/stargazers)
+[![license](https://img.shields.io/badge/license-MIT-29b6f6?style=flat)](LICENSE)
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=flat&logo=windows&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=flat&logo=html5&logoColor=white)
+![WebView2](https://img.shields.io/badge/WebView2-0078D7?style=flat&logo=microsoftedge&logoColor=white)
+
 手元の動画フォルダを **YouTube 風の画面で再生する** Windows 向けデスクトップアプリ。
 動画は移動もコピーもせず、フォルダを索引するだけ。エクスプローラーでダブルクリックした動画もこのアプリで開ける。
 
 A Windows desktop app that plays your local video folders in a YouTube-like UI (no copying, just indexing).
+
+<p align="center"><img src="docs/images/library.png" width="860" alt="一覧画面"></p>
+
+| 再生画面（カーソルを乗せると操作バーが出る） | ⚙ 設定メニュー |
+|---|---|
+| ![再生画面](docs/images/player.png) | ![設定メニュー](docs/images/settings.png) |
+| **⋮ メニュー（カードの右下・右クリック）** | **フォルダへ移動** |
+| ![⋮ メニュー](docs/images/menu.png) | ![フォルダへ移動](docs/images/move.png) |
+
+<sub>写真の動画はすべて ffmpeg で作ったサンプル映像（`docs/make_screenshots.py` で撮り直せる）。</sub>
 
 ## できること
 

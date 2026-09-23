@@ -8,7 +8,7 @@
 <style>
 :root{
   --bg:#0f0f0f; --card:#212121; --line:#303030;
-  --fg:#f1f1f1; --fg2:#aaa; --accent:#ff3d3d; --ok:#3ea6ff; --warn:#ffb020;
+  --fg:#f1f1f1; --fg2:#aaa; --accent:#ff3d3d; --brand:#29b6f6; --ok:#3ea6ff; --warn:#ffb020;
   --radius:12px;
 }
 *{box-sizing:border-box}
@@ -27,7 +27,7 @@ header{
   background:var(--bg);border-bottom:1px solid var(--line);
 }
 .logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:-.3px}
-.logo .mark{width:28px;height:20px;border-radius:6px;background:var(--accent);
+.logo .mark{width:28px;height:20px;border-radius:6px;background:var(--brand);
   display:grid;place-items:center}
 .logo .mark::after{content:"";border-left:8px solid #fff;border-top:5px solid transparent;
   border-bottom:5px solid transparent;margin-left:2px}
@@ -525,14 +525,27 @@ const goFullscreen = () => {
 };
 
 async function rescan(){
-  $("#scanBtn").disabled = true;
   await fetch("/api/scan", {method:"POST"});
-  const t = setInterval(async () => {
+  watchScan();
+}
+// 走査の進み具合を「再スキャン」ボタンに出し、走査しながら一覧も少しずつ更新し、終わったら読み直す
+function watchScan(){
+  if(watchScan.timer) return;
+  $("#scanBtn").disabled = true;
+  let ticks = 0;
+  watchScan.timer = setInterval(async () => {
     const s = await (await fetch("/api/scan/status")).json();
     $("#scanBtn").textContent = s.running ? "走査 " + s.done + "/" + s.total : "再スキャン";
-    if(!s.running){ clearInterval(t); $("#scanBtn").disabled = false; load(); }
+    if(!s.running){
+      clearInterval(watchScan.timer);
+      watchScan.timer = 0;
+      $("#scanBtn").disabled = false;
+      load();
+    } else if(++ticks % 5 === 0) load();   // 3秒ごとに、見つかった分だけでも出す
   }, 600);
 }
+// 初回起動などで走査中なら、終わるまで進み具合を出す（以前は終わっても一覧が空のままだった）
+fetch("/api/scan/status").then(r => r.json()).then(s => { if(s.running) watchScan(); }).catch(() => {});
 
 // quiet … プレイヤーから呼ぶとき。右下の「変換ジョブ」パネルを開かない（操作バーに重なるため）
 async function convert(id, quiet){

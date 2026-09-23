@@ -7,7 +7,7 @@
 | ファイル | 役割 |
 |---|---|
 | `MyLocalTube.cs` | ランチャ本体（C#）。exe と同じフォルダの `.venv\Scripts\pythonw.exe desktop.py` を起動して即終了する |
-| `make_icon.py` | アイコン `static/app.ico` を生成する（UIのロゴと同じ赤い角丸＋再生マーク） |
+| `make_icon.py` | アイコン `static/app.ico` を生成する（UIのロゴと同じ水色の角丸＋再生マーク） |
 | `build.cmd` | 上の2つから exe とアイコンを作り直す |
 | `file_assoc.py` | 動画ファイルの関連付け（既定のアプリ候補への登録）。`register` / `status` / `unregister` |
 
