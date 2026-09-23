@@ -15,6 +15,10 @@ MyLocalTube.exe（ランチャ）→ pythonw desktop.py
         ├── app.py     … 動画の Range 配信 / 詰め替え配信、API、進捗の SSE
         ├── fileops.py … フォルダへ移動・ごみ箱へ移動・エクスプローラーで表示
         └── jobs.py    … 120fps 変換ジョブのキュー（外部ツールを子プロセスで実行）
+
+osdeps.py … OS ごとに違う処理の窓口（desktop / fileops / jobs はここだけを通す）
+  ├── platform_win.py … Windows: Win32 API・ごみ箱・エクスプローラー・taskkill
+  └── platform_mac.py … macOS: まだ空の実装（呼ばれたことをログに残すだけ）
 ```
 
 動画はパスを DB に記録するだけで、ファイルが動くのは ⋮ メニューで操作したときだけ。
@@ -23,7 +27,7 @@ MyLocalTube.exe（ランチャ）→ pythonw desktop.py
 
 | # | 内容 |
 |---|---|
-| 1 | Windows 専用（WebView2・Win32 API・ごみ箱・レジストリを使う）。macOS 版は未着手 |
+| 1 | Windows 専用（WebView2・Win32 API・ごみ箱・レジストリを使う）。macOS 版は OS ごとの処理を分けたところまで（§4.5。macOS 側は空の実装） |
 | 2 | MPEG-2 映像の .ts は WebView2 で再生できないので一覧に出していない。見たい場合はリアルタイム変換（NVENC 等）が必要 |
 | 3 | 変換ツールを強制終了すると、ツールの作業フォルダが残ることがある（ツール側で起動時に掃除するのが筋） |
 | 4 | 最大化中はウィンドウを動画の縦横比に合わせられないので、画面と比率が違うと細い黒帯が出る |
@@ -42,6 +46,7 @@ MyLocalTube.exe（ランチャ）→ pythonw desktop.py
 | 移動 | 同じドライブ内の `os.rename` のみ | 数GBでも一瞬で終わる。別ドライブはコピーになるので対象外。上書きはしない |
 | 120fps 変換 | 外部ツール（任意） | 変換ツールは本リポジトリに含めない。仕様は README |
 | 設定 | `config.py`（既定値）＋ `config_local.py`（個人の値。git 管理外） | 動画フォルダの場所などをリポジトリに入れない |
+| OS ごとの処理 | `osdeps.py` が `platform_win.py` / `platform_mac.py` の一方を選ぶ | `sys.platform` の分岐を散らさず、Windows の動作を変えずに macOS を足すため。名前を `platform.py` にしない（標準ライブラリの `platform` を隠す） |
 
 ## 4. 実装の要点
 
@@ -76,6 +81,18 @@ MyLocalTube.exe（ランチャ）→ pythonw desktop.py
 - HKCU に ProgID・OpenWithProgids・Capabilities・RegisteredApplications を登録し、
   `ms-settings:defaultapps?registeredAppUser=MyLocalTube` を開く
 - 既定（UserChoice）そのものはハッシュで保護されていて、アプリからは変えられない。最後の選択は人の操作
+
+### 4.5 OS ごとの処理（osdeps.py / platform_win.py / platform_mac.py）
+
+- `platform_*.py` には OS の API を呼ぶ薄い部品だけを置く（ミューテックス・ダイアログ・ウィンドウの位置と大きさ・
+  ごみ箱・フォルダで表示・プロセスツリーの停止）。画面に出す文言・ログ・判断（何秒待つか、失敗したらどうするか）は
+  呼び出し側（desktop.py / fileops.py / jobs.py）に残す。2 つのファイルの関数の名前と引数はそろえる
+- `platform_mac.py` はまだ空の実装。呼ばれるたびに `phase=platform fn=<名前> impl=stub ms=` をログに残す。
+  成功したふりはしない（ごみ箱へ送る・Finder で表示は `NotImplementedError`）。`window_handle()` が 0 を返すので、
+  ウィンドウを動画に合わせる処理などは何もしない
+- 起動時に `phase=platform name= os= arch= python= pywebview=` をログに残す（Mac で調べるときの手がかり）
+- 分けたときの確認: 分ける前と後で同じ回帰テスト（移動・ごみ箱・二重起動・起動中への受け渡し・ダイアログ・
+  ウィンドウ合わせ・全画面・変換の取り消し・exe の再起動）を流し、`desktop.log` の処理の並びが同じことを確かめた
 
 ## 5. 踏んだ不具合と対策（同じ轍を踏まないため）
 
@@ -117,6 +134,11 @@ MyLocalTube.exe（ランチャ）→ pythonw desktop.py
   （使用中のアプリと混ざらないように）
 - 画面の確認は WebView2 の開発者ツール用プロトコル（`webview.settings["REMOTE_DEBUGGING_PORT"]`）か、
   ブラウザで `start.cmd` 版を開いて行う。音は出さない（`V.muted = true`、音量ブーストはスピーカーへの経路を外して計測）
+- テストで出るダイアログを自動で閉じるときは、ボタンを `BM_CLICK` で押す。OK だけのメッセージボックスの
+  OK ボタンの ID は 2 なので、`WM_COMMAND`（IDOK=1）を送っても閉じない
+- 開発者ツール用プロトコルで送った Escape では WebView2 の全画面は解除されない。解除の確認は `f` キーで行う
+- venv の `python.exe` は本体（元の Python の `python.exe`）を子プロセスとして起動するランチャ。
+  プロセスを数えるテストでは 1 回の起動が 2 つに見える（ランチャを止めれば本体も止まる）
 
 ## 8. 関連ドキュメント
 

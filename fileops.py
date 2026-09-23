@@ -7,19 +7,17 @@
   - 元動画と 120fps 版は同じフォルダにあることで対応付けているので、移動は2本一緒に行う。
   - 操作できるのは config.LIBRARY_ROOTS の配下だけ。
 """
-import ctypes
 import logging
 import os
 import re
-import subprocess
 import time
 import uuid
-from ctypes import wintypes
 from pathlib import Path
 
 import config
 import jobs
 import library
+import osdeps
 
 log = logging.getLogger("mlt.fileops")
 
@@ -238,33 +236,10 @@ def move_video(vid, dest, new_folder=""):
 
 
 # ─────────────────────── ごみ箱へ移動 ───────────────────────
-class _SHFILEOPSTRUCTW(ctypes.Structure):
-    _fields_ = [("hwnd", wintypes.HWND), ("wFunc", wintypes.UINT),
-                ("pFrom", wintypes.LPCWSTR), ("pTo", wintypes.LPCWSTR),
-                ("fFlags", ctypes.c_ushort), ("fAnyOperationsAborted", wintypes.BOOL),
-                ("hNameMappings", ctypes.c_void_p), ("lpszProgressTitle", wintypes.LPCWSTR)]
-
-
-_FO_DELETE = 0x3
-_FOF_SILENT = 0x4
-_FOF_NOCONFIRMATION = 0x10
-_FOF_ALLOWUNDO = 0x40              # ごみ箱へ
-_FOF_NOERRORUI = 0x400
-_FOF_WANTNUKEWARNING = 0x4000      # ごみ箱に入らず完全削除になるときは警告を出す
-
-
 def _recycle(path: Path):
-    op = _SHFILEOPSTRUCTW()
-    op.wFunc = _FO_DELETE
-    op.pFrom = str(path) + "\0"            # 末尾は \0 が2つ必要（1つは ctypes が付ける）
-    op.fFlags = (_FOF_ALLOWUNDO | _FOF_NOCONFIRMATION | _FOF_SILENT
-                 | _FOF_NOERRORUI | _FOF_WANTNUKEWARNING)
-    rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
-    if op.fAnyOperationsAborted:
+    # 使用中（共有違反）で送れないときは osdeps.recycle が PermissionError を出す → _retry が再試行する
+    if not osdeps.recycle(path):
         raise OpError(409, "ごみ箱へ移動するのを取りやめました")
-    if rc != 0 or path.exists():
-        # 使用中（共有違反）のときもここに来るので、_retry に再試行させる
-        raise PermissionError(rc, f"SHFileOperation code=0x{rc:x}")
 
 
 def delete_video(vid):
@@ -298,6 +273,5 @@ def reveal(vid):
     p = Path(v["path"])
     if not p.exists():
         raise OpError(404, "ファイルが見つかりません（再スキャンしてください）")
-    # 引数はこの形でないと explorer がパスの空白で切ってしまう
-    subprocess.Popen(f'explorer /select,"{p}"')
+    osdeps.reveal(p)
     return {"ok": True}

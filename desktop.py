@@ -12,7 +12,6 @@
 ブラウザ版（start.cmd / python app.py）はそのまま使える。
 ログ: data/desktop.log
 """
-import ctypes
 import json
 import logging
 import os
@@ -21,7 +20,6 @@ import sys
 import threading
 import time
 import urllib.request
-from ctypes import wintypes
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -29,6 +27,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import config  # noqa: E402
+import osdeps  # noqa: E402  （Win32 などの OS 依存処理は platform_win.py / platform_mac.py）
 
 TITLE = "MyLocalTube"
 ICON = HERE / "static" / "app.ico"
@@ -41,9 +40,6 @@ RUN_ID = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"   # ログの追跡�
 
 _T0 = time.perf_counter()
 log = logging.getLogger("mlt.desktop")      # "mlt.*"（fileops など）も同じファイルへ出す
-
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 
 def _ms():
@@ -82,22 +78,17 @@ def _acquire_single_instance(wait_exit=40.0):
     変換ジョブを止めながらの終了は最大で約35秒かかる（jobs.shutdown 20秒 + taskkill
     15秒）ので、待ち時間はそれより長くする。それでも終わらなければ理由を表示する。
     """
-    _kernel32.CreateMutexW.restype = wintypes.HANDLE
     deadline = time.time() + wait_exit
     while True:
-        handle = _kernel32.CreateMutexW(None, False, MUTEX_NAME)
-        if ctypes.get_last_error() != 183:  # ERROR_ALREADY_EXISTS
+        handle = osdeps.try_single_instance_lock(MUTEX_NAME)
+        if handle is not False:
             return handle                   # プロセス終了まで保持する（GCさせない）
-        _kernel32.CloseHandle(handle)
-        hwnd = _user32.FindWindowW(None, TITLE)
-        if hwnd:
-            _user32.ShowWindow(hwnd, 9)     # SW_RESTORE（最小化されていても戻す）
-            _user32.SetForegroundWindow(hwnd)
+        if osdeps.activate_window(TITLE):   # 最小化されていても戻して前面に出す
             return None
         if time.time() > deadline:
             log.warning("phase=start ok=false previous_instance_still_closing=true")
-            _user32.MessageBoxW(0, "前回の MyLocalTube がまだ終了処理中です。\n"
-                                   "少し待ってからもう一度起動してください。", TITLE, 0x30)
+            osdeps.alert(0, "前回の MyLocalTube がまだ終了処理中です。\n"
+                            "少し待ってからもう一度起動してください。", TITLE)
             return None
         time.sleep(0.2)
 
@@ -105,7 +96,7 @@ def _acquire_single_instance(wait_exit=40.0):
 def _set_app_id():
     """タスクバーで python 本体と別のアプリとして扱わせる（アイコンとグループ分け）。"""
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+        osdeps.set_app_id(APP_ID)
     except Exception as e:
         log.warning("phase=app_id ok=false err=%r", e)
 
@@ -199,17 +190,6 @@ class _Server:
 _window = None      # js_api の属性に持たせると pywebview が中身まで公開しようとするので外に置く
 
 
-class _MONITORINFO(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
-                ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
-
-
-def _window_rect(hwnd):
-    r = wintypes.RECT()
-    _user32.GetWindowRect(hwnd, ctypes.byref(r))
-    return r.left, r.top, r.right - r.left, r.bottom - r.top
-
-
 class Bridge:
     """画面側（index.html）から window.pywebview.api.xxx() で呼ばれる。"""
 
@@ -232,12 +212,10 @@ class Bridge:
         except (TypeError, ValueError):
             return False
         if not hwnd or vw <= 0 or vh <= 0 or self._fullscreen \
-                or _user32.IsZoomed(hwnd) or _user32.IsIconic(hwnd):
+                or osdeps.is_zoomed(hwnd) or osdeps.is_minimized(hwnd):
             return False
-        x, y, w, h = _window_rect(hwnd)
-        cr = wintypes.RECT()
-        _user32.GetClientRect(hwnd, ctypes.byref(cr))
-        cw, ch = cr.right, cr.bottom
+        x, y, w, h = osdeps.window_rect(hwnd)
+        cw, ch = osdeps.client_size(hwnd)
         cur_cw, cur_ch = cw, ch                          # いま実際に表示されている大きさ
         frame_w, frame_h = w - cw, h - ch                # 枠とタイトルバーの分
         if self._saved_rect is not None and (x, y, w, h) == self._fitted_rect:
@@ -245,13 +223,9 @@ class Bridge:
             # 大きさではなく、ユーザーが決めていた元の大きさを基準にする
             x, y, w, h = self._saved_rect
             cw, ch = w - frame_w, h - frame_h
-        _user32.MonitorFromWindow.restype = wintypes.HMONITOR
-        mi = _MONITORINFO()
-        mi.cbSize = ctypes.sizeof(_MONITORINFO)
-        _user32.GetMonitorInfoW(_user32.MonitorFromWindow(hwnd, 2), ctypes.byref(mi))
-        work = mi.rcWork
-        max_cw = (work.right - work.left) - frame_w
-        max_ch = (work.bottom - work.top) - frame_h
+        work_l, work_t, work_r, work_b = osdeps.work_area(hwnd)
+        max_cw = (work_r - work_l) - frame_w
+        max_ch = (work_b - work_t) - frame_h
         aspect = vw / vh
         new_cw, new_ch = cw, round(cw / aspect)
         if new_ch > max_ch:
@@ -262,13 +236,12 @@ class Bridge:
             return True                                  # もう合っている
         nw, nh = new_cw + frame_w, new_ch + frame_h
         # 中心の位置を保ちつつ、画面からはみ出さないようにする
-        nx = min(max(x + (w - nw) // 2, work.left), work.right - nw)
-        ny = min(max(y + (h - nh) // 2, work.top), work.bottom - nh)
+        nx = min(max(x + (w - nw) // 2, work_l), work_r - nw)
+        ny = min(max(y + (h - nh) // 2, work_t), work_b - nh)
         if self._saved_rect is None:
             self._saved_rect = (x, y, w, h)
-        SWP_NOZORDER, SWP_NOACTIVATE = 0x4, 0x10
-        _user32.SetWindowPos(hwnd, None, nx, ny, nw, nh, SWP_NOZORDER | SWP_NOACTIVATE)
-        self._fitted_rect = _window_rect(hwnd)           # 最小サイズで止まることもあるので実測
+        osdeps.move_window(hwnd, nx, ny, nw, nh)
+        self._fitted_rect = osdeps.window_rect(hwnd)     # 最小サイズで止まることもあるので実測
         log.info("phase=fit_window video=%dx%d client=%dx%d->%dx%d", vw, vh, cur_cw, cur_ch,
                  new_cw, new_ch)
         return True
@@ -285,12 +258,11 @@ class Bridge:
         hwnd = _hwnd()
         saved, fitted = self._saved_rect, self._fitted_rect
         self._saved_rect = self._fitted_rect = None
-        if not hwnd or saved is None or _user32.IsZoomed(hwnd):
+        if not hwnd or saved is None or osdeps.is_zoomed(hwnd):
             return False
-        if _window_rect(hwnd) != fitted:
+        if osdeps.window_rect(hwnd) != fitted:
             return False
-        SWP_NOZORDER, SWP_NOACTIVATE = 0x4, 0x10
-        _user32.SetWindowPos(hwnd, None, *saved, SWP_NOZORDER | SWP_NOACTIVATE)
+        osdeps.move_window(hwnd, *saved)
         log.info("phase=restore_window rect=%s", saved)
         return True
 
@@ -314,16 +286,13 @@ class Bridge:
 
 # ─────────────────────────── ウィンドウ ───────────────────────────
 def _hwnd():
-    try:
-        return int(_window.native.Handle.ToInt64())
-    except Exception:
-        return 0
+    """ウィンドウのハンドル（Windows では HWND）。まだ無い・取れないときは 0。"""
+    return osdeps.window_handle(_window)
 
 
 def _confirm(message):
-    MB_OKCANCEL, MB_ICONWARNING, MB_DEFBUTTON2, IDOK = 0x1, 0x30, 0x100, 1
-    return _user32.MessageBoxW(_hwnd(), message, TITLE,
-                               MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) == IDOK
+    """OK / キャンセル（既定はキャンセル）。OK なら True。"""
+    return osdeps.confirm(_hwnd(), message, TITLE)
 
 
 def _on_closing():
@@ -372,9 +341,7 @@ def _show_video(v):
         return
     hwnd = _hwnd()
     if hwnd:
-        if _user32.IsIconic(hwnd):
-            _user32.ShowWindow(hwnd, 9)          # 最小化されていたら戻す
-        _user32.SetForegroundWindow(hwnd)
+        osdeps.restore_and_focus(hwnd)           # 最小化されていたら戻して前面に出す
     try:
         _window.evaluate_js("openFromApp(" + json.dumps(v) + ")")
         log.info("phase=open id=%s external=%s playable=%s path=%s",
@@ -397,9 +364,8 @@ def _forward_to_running(path):
     except Exception as e:
         # 古い版のアプリが開いている（/api/open が無い）ときなど
         log.warning("phase=forward_open port=%d ok=false err=%r path=%s", port, e, path)
-        _user32.MessageBoxW(0, "開いている MyLocalTube に動画を渡せませんでした。\n"
-                               "MyLocalTube を一度閉じてから、もう一度開いてください。\n\n" + path,
-                            TITLE, 0x30)
+        osdeps.alert(0, "開いている MyLocalTube に動画を渡せませんでした。\n"
+                        "MyLocalTube を一度閉じてから、もう一度開いてください。\n\n" + path, TITLE)
 
 
 def main(on_ready=None, argv=None):
@@ -408,6 +374,7 @@ def main(on_ready=None, argv=None):
     _setup_logging()
     argv = sys.argv[1:] if argv is None else argv
     log.info("phase=start argv=%s python=%s", argv, sys.executable)
+    log.info("phase=platform %s", osdeps.describe())
     video = _video_arg(argv)
 
     mutex = _acquire_single_instance()
@@ -423,7 +390,7 @@ def main(on_ready=None, argv=None):
         url = server.start()
     except Exception as e:
         log.exception("phase=server_start ok=false err=%r", e)
-        _user32.MessageBoxW(0, f"起動できませんでした。\n\n{e}", TITLE, 0x10)
+        osdeps.alert(0, f"起動できませんでした。\n\n{e}", TITLE, error=True)
         return 1
 
     import webview
@@ -446,7 +413,7 @@ def main(on_ready=None, argv=None):
                 _show_video(v)
         except Exception as e:
             log.warning("phase=open_initial ok=false err=%r path=%s", e, video)
-            _user32.MessageBoxW(_hwnd(), f"動画を開けませんでした。\n\n{video}\n\n{e}", TITLE, 0x30)
+            osdeps.alert(_hwnd(), f"動画を開けませんでした。\n\n{video}\n\n{e}", TITLE)
 
     opened = []                              # loaded は再読み込みのたびに来るので、開くのは最初の1回だけ
 

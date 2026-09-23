@@ -14,6 +14,7 @@ from pathlib import Path
 
 import config
 import library
+import osdeps
 
 # tqdm の行から「フェーズ名」と進捗を拾う。変換ツールは2種類の形式を出してよい（README の仕様）。
 #   件数型: "[2/2] 変換:  48%|#####    | 30/62 [02:11<02:20]"
@@ -133,16 +134,7 @@ def _kill_tree(proc):
     「入力終わり」と受け取り、途中までの動画を *_120fps.mp4 として正常に書き終えてしまう。
     変換ツールは出力が既にあると次回スキップするので、壊れた変換結果が確定してしまう。
     """
-    try:
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       timeout=15, creationflags=library.NO_WINDOW)
-    except Exception:
-        pass
-    try:
-        proc.kill()
-    except Exception:
-        pass
+    osdeps.kill_process_tree(proc)
 
 
 def _remove_partial(job):
