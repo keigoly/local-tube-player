@@ -8,8 +8,11 @@ macOS 用の同じ名前の関数は platform_mac.py にある（関数の名前
 中身は desktop.py / fileops.py / jobs.py から動作を変えずに移したもの（macOS 移植の Step 1-0）。
 """
 import ctypes
+import os
 import subprocess
+import uuid
 from ctypes import wintypes
+from pathlib import Path
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -40,6 +43,95 @@ def activate_window(title):
 def set_app_id(app_id):
     """タスクバーで python 本体と別のアプリとして扱わせる（アイコンとグループ分け）。"""
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+
+
+# ─────────────────────── タスクバーのピン留め ───────────────────────
+_PINNED_DIR = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Internet Explorer" / \
+    "Quick Launch" / "User Pinned" / "TaskBar"
+
+
+def pinned_shortcuts(app_id):
+    """タスクバーのピン留めのうち、app_id を持つもの。[(ファイル名, 行き先が python か), ...]
+
+    同じ ID のピン留めがあると、タスクバーは実行中のウィンドウをそのピン留めの
+    アイコンと名前で表示する。ウィンドウからピン留めすると python が行き先になるため、それを見分ける。
+    .lnk の中身は解析せず、ID と python の実行ファイル名が含まれるかをバイト列で調べるだけ。
+    """
+    key = app_id.encode("utf-16-le")
+    found = []
+    for lnk in sorted(_PINNED_DIR.glob("*.lnk")):
+        data = lnk.read_bytes()
+        if key not in data:
+            continue
+        lower = data.lower()
+        to_python = any(n in lower for n in (b"pythonw.exe", b"python.exe",
+                                             "pythonw.exe".encode("utf-16-le"),
+                                             "python.exe".encode("utf-16-le")))
+        found.append((lnk.name, to_python))
+    return found
+
+
+# SHGetPropertyStoreForWindow（ウィンドウごとの AppUserModel の値）で使う型
+class _GUID(ctypes.Structure):
+    _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+
+def _guid(text):
+    return _GUID.from_buffer_copy(uuid.UUID(text).bytes_le)
+
+
+class _PROPERTYKEY(ctypes.Structure):
+    _fields_ = [("fmtid", _GUID), ("pid", wintypes.DWORD)]
+
+
+class _PROPVARIANT(ctypes.Structure):
+    # 値は文字列（VT_LPWSTR）だけを使う。大きさは本物に合わせる（x64 で 24 バイト）
+    _fields_ = [("vt", ctypes.c_ushort), ("reserved", ctypes.c_ushort * 3),
+                ("pwszVal", ctypes.c_wchar_p), ("_pad", ctypes.c_void_p)]
+
+
+_IID_IPropertyStore = _guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")
+_FMTID_AppUserModel = _guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3")
+_PID_RELAUNCH_COMMAND, _PID_RELAUNCH_ICON, _PID_RELAUNCH_NAME, _PID_APP_ID = 2, 3, 4, 5
+_VT_LPWSTR = 31
+_shell32 = ctypes.OleDLL("shell32")          # HRESULT が失敗なら OSError
+_shell32.SHGetPropertyStoreForWindow.argtypes = [
+    wintypes.HWND, ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_void_p)]
+_ole32 = ctypes.WinDLL("ole32")
+
+
+def _com_method(obj, index, restype, *argtypes):
+    """COM オブジェクトの vtable の index 番目の関数。"""
+    vtbl = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+    return ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)(vtbl[index])
+
+
+def set_relaunch_info(hwnd, app_id, command, display_name, icon):
+    """ウィンドウからタスクバーにピン留めしたとき、python 本体ではなく command を
+    display_name と icon（"パス,番号"）で登録させる（System.AppUserModel.Relaunch*）。
+
+    Relaunch* はウィンドウ自身に ID が付いているときだけ使われるので、ID も付ける（プロセスの ID と同じ値）。
+    IPropertyStore の vtable: 2=Release, 6=SetValue, 7=Commit。
+    """
+    hr = _ole32.CoInitializeEx(None, 0x2)    # COINIT_APARTMENTTHREADED（呼ばれるのは pywebview のイベントのスレッド）
+    store = ctypes.c_void_p()
+    try:
+        _shell32.SHGetPropertyStoreForWindow(hwnd, ctypes.byref(_IID_IPropertyStore),
+                                             ctypes.byref(store))
+        set_value = _com_method(store, 6, ctypes.HRESULT,
+                                ctypes.POINTER(_PROPERTYKEY), ctypes.POINTER(_PROPVARIANT))
+        # ID は最後に付ける（付いた時点で Relaunch* がそろっているように）
+        for pid, value in ((_PID_RELAUNCH_COMMAND, command), (_PID_RELAUNCH_NAME, display_name),
+                           (_PID_RELAUNCH_ICON, icon), (_PID_APP_ID, app_id)):
+            set_value(store, _PROPERTYKEY(_FMTID_AppUserModel, pid),
+                      _PROPVARIANT(vt=_VT_LPWSTR, pwszVal=value))
+        _com_method(store, 7, ctypes.HRESULT)(store)
+    finally:
+        if store:
+            _com_method(store, 2, ctypes.c_ulong)(store)
+        if hr >= 0:
+            _ole32.CoUninitialize()
 
 
 # ─────────────────────────── ダイアログ ───────────────────────────

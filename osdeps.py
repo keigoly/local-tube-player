@@ -19,6 +19,9 @@ else:
 try_single_instance_lock = _impl.try_single_instance_lock
 activate_window = _impl.activate_window
 set_app_id = _impl.set_app_id
+# タスクバーのピン留め
+pinned_shortcuts = _impl.pinned_shortcuts
+set_relaunch_info = _impl.set_relaunch_info
 # ダイアログ
 alert = _impl.alert
 confirm = _impl.confirm

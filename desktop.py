@@ -101,6 +101,53 @@ def _set_app_id():
         log.warning("phase=app_id ok=false err=%r", e)
 
 
+def _log_taskbar_pins():
+    """同じ ID のピン留めを記録する。行き先が python のピン留めがあると、
+    タスクバーのボタンが python のアイコンと名前になる（ウィンドウからピン留めしたとき）。"""
+    t0 = time.perf_counter()
+    try:
+        pins = osdeps.pinned_shortcuts(APP_ID)
+    except Exception as e:
+        log.warning("phase=taskbar_pin ok=false err=%r", e)
+        return
+    ms = int((time.perf_counter() - t0) * 1000)
+    to_python = [name for name, py in pins if py]
+    if to_python:
+        log.warning("phase=taskbar_pin ok=false pinned=%s to_python=%s ms=%d "
+                    "(ピン留めを外し、付け直すこと)", [n for n, _ in pins], to_python, ms)
+    else:
+        log.info("phase=taskbar_pin ok=true pinned=%s ms=%d", [n for n, _ in pins], ms)
+
+
+def _relaunch_target():
+    """ピン留めから起動するときの (コマンド, アイコン)。ランチャ exe があればそれ、
+    無ければ（build.cmd の前など）pythonw で desktop.py を起動する。"""
+    exe = HERE / "MyLocalTube.exe"
+    if exe.exists():
+        return f'"{exe}"', f"{exe},0"
+    py = Path(sys.executable)
+    if py.with_name("pythonw.exe").exists():
+        py = py.with_name("pythonw.exe")    # コンソール窓を出さない
+    return f'"{py}" "{HERE / "desktop.py"}"', f"{ICON},0"
+
+
+def _set_relaunch_info():
+    """ウィンドウからタスクバーにピン留めしたとき、python 本体ではなく MyLocalTube が
+    登録されるようにする（shown のあと。ウィンドウのハンドルが要る）。"""
+    hwnd = _hwnd()
+    if not hwnd:
+        return
+    command, icon = _relaunch_target()
+    t0 = time.perf_counter()
+    try:
+        osdeps.set_relaunch_info(hwnd, APP_ID, command, TITLE, icon)
+    except Exception as e:
+        log.warning("phase=relaunch_info ok=false err=%r", e)
+        return
+    log.info("phase=relaunch_info ok=true command=%s icon=%s ms=%d",
+             command, icon, int((time.perf_counter() - t0) * 1000))
+
+
 # ─────────────────────────── サーバ ───────────────────────────
 def _port_free(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -384,6 +431,7 @@ def main(on_ready=None, argv=None):
             _forward_to_running(video)
         return 0
     _set_app_id()
+    _log_taskbar_pins()
 
     server = _Server()
     try:
@@ -426,6 +474,7 @@ def main(on_ready=None, argv=None):
             threading.Thread(target=on_ready, args=(_window,), daemon=True).start()
     _window.events.loaded += _loaded
     _window.events.shown += lambda: log.info("phase=window_shown ms_since_start=%d", _ms())
+    _window.events.shown += _set_relaunch_info
 
     debug = os.environ.get("MLT_DEBUG") == "1"      # 1 にすると開発者ツールが開く
     webview.start(gui="edgechromium", debug=debug, private_mode=False,

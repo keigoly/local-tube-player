@@ -48,6 +48,18 @@ def set_app_id(app_id):
     """macOS では .app の Info.plist が同じ役目をするので、ここでは何もしない。"""
 
 
+# ─────────────────────── タスクバーのピン留め ───────────────────────
+@_stub
+def pinned_shortcuts(app_id):
+    """Dock には Windows のピン留めの問題が無いので、いつも空。"""
+    return []
+
+
+@_stub
+def set_relaunch_info(hwnd, app_id, command, display_name, icon):
+    """Dock に置く対象は .app なので、ここでは何もしない。"""
+
+
 # ─────────────────────────── ダイアログ ───────────────────────────
 @_stub
 def alert(owner, text, title, error=False):
