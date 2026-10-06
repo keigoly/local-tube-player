@@ -145,6 +145,8 @@ main{flex:1;overflow-y:auto;padding:20px 24px 60px}
 .dlg .body{min-height:0;display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.6}
 .dlg .fname{color:var(--fg2);word-break:break-all}
 .dlg .hint{color:var(--fg2);font-size:12.5px;white-space:pre-line}
+.dlg .notes{max-height:40vh;overflow:auto;white-space:pre-wrap;font-size:13px;padding:10px 12px;
+  background:#181818;border:1px solid var(--line);border-radius:8px}   /* アップデートの更新内容 */
 .dlg .err{color:#ff7070;font-size:13px;margin:8px 0 0;min-height:0}
 .dlg .err:empty{display:none}
 .dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
@@ -1750,7 +1752,79 @@ es.onmessage = e => {
   }
 };
 
+// ───────── アップデートの知らせ（GitHub の Release・2026-10-06）─────────
+// 起動時に、最新の Release が今の版より新しければ聞く（GitHub への問い合わせはサーバが 1 日 1 回まで）。
+// 「あとで」はこの起動の間だけ閉じる。「このバージョンはスキップ」はその版を知らせない（次の版は知らせる）
+async function checkUpdate(){
+  let u;
+  try { u = await (await fetch("/api/update")).json(); } catch(e){ return; }
+  if(!u.available || u.skipped || playerOn()) return;
+  updateDialog(u);
+}
+function updateDialog(u){
+  const v = u.latest.version;
+  const wrap = el("div", "modal");
+  wrap.innerHTML = '<div class="dlg" role="dialog" aria-modal="true"><h3>アップデートがあります</h3>' +
+    '<div class="body"></div><p class="err"></p><div class="acts">' +
+    '<button class="tool" data-a="later">あとで</button>' +
+    '<button class="tool" data-a="skip">このバージョンはスキップ</button>' +
+    '<button class="tool primary" data-a="go"></button></div></div>';
+  const body = wrap.querySelector(".body"), err = wrap.querySelector(".err");
+  const later = wrap.querySelector('[data-a="later"]'), skipBtn = wrap.querySelector('[data-a="skip"]');
+  const go = wrap.querySelector('[data-a="go"]');
+  const hint = el("div", "hint", u.auto ? "アップデートすると、アプリが自動で再起動します。"
+                                        : u.reason + "。配布ページから更新してください。");
+  body.append(el("div", "", "MyLocalTube v" + v + " が公開されました（今の版: v" + u.current + "）"));
+  if(u.latest.notes) body.append(el("div", "notes", u.latest.notes));
+  body.append(hint);
+  go.textContent = u.auto ? "アップデート" : "配布ページを開く";
+  let busy = false;
+  const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); };
+  const onKey = e => { if(e.key === "Escape" && !busy){ e.preventDefault(); e.stopPropagation(); close(); } };
+  later.onclick = () => { if(!busy) close(); };
+  skipBtn.onclick = async () => {
+    if(busy) return;
+    try {
+      await api("POST", "/api/update/skip", {version: v});
+      close();
+      toast("v" + v + " はお知らせしません（次の版が出たらお知らせします）", false, true);
+    } catch(e){ err.textContent = e.message; }
+  };
+  go.onclick = async () => {
+    const d = desktop();
+    if(!u.auto){                          // git で入れていない・手元を書き換えている → 配布ページへ
+      if(d && d.open_url) d.open_url(u.latest.url); else window.open(u.latest.url, "_blank");
+      close();
+      return;
+    }
+    if(busy) return;
+    busy = true;
+    [later, skipBtn, go].forEach(b => b.disabled = true);
+    err.textContent = "";
+    go.textContent = "アップデートしています…";
+    try {
+      const r = await api("POST", "/api/update/apply", {version: v});
+      const restart = d && d.restart_app;
+      hint.textContent = "v" + r.to + " にしました。" +
+        (r.launcher ? "起動用の MyLocalTube.exe も変わっています。launcher\\build.cmd を実行してください。" : "") +
+        (restart ? "再起動します…" : "アプリ（start.cmd）を起動し直してください。");
+      go.textContent = "完了";
+      if(restart) setTimeout(() => d.restart_app(), 1500);
+      else { busy = false; later.textContent = "閉じる"; later.disabled = false; }
+    } catch(e){
+      err.textContent = e.message;
+      busy = false;
+      [later, skipBtn, go].forEach(b => b.disabled = false);
+      go.textContent = "アップデート";
+    }
+  };
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(wrap);
+  go.focus();
+}
+
 load();
+checkUpdate();
 </script>
 </body>
 </html>

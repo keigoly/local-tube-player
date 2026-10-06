@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -235,6 +236,19 @@ class _Server:
 
 # ─────────────────────── JS から呼べるAPI ───────────────────────
 _window = None      # js_api の属性に持たせると pywebview が中身まで公開しようとするので外に置く
+_restart = False    # アップデートのあと、窓を閉じてから起動し直す（Bridge.restart_app → main の最後）
+
+
+def _relaunch():
+    """終了処理のあとに新しいプロセスを起こす。新しい方は、このプロセスが終わるまで待ってから開く
+    （_acquire_single_instance。窓はもう無いので、古い窓を前に出して終わることはない）。"""
+    cmd, _ = _relaunch_target()
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    try:
+        subprocess.Popen(cmd, cwd=str(HERE), creationflags=flags, close_fds=True)
+        log.info("phase=restart spawned=true cmd=%s", cmd)
+    except Exception as e:  # noqa: BLE001 — 起こせなくても、利用者が手で起動すれば新しい版になる
+        log.warning("phase=restart spawned=false err=%r cmd=%s", e, cmd)
 
 
 class Bridge:
@@ -333,6 +347,23 @@ class Bridge:
         r = _window.create_file_dialog(webview.FileDialog.FOLDER)
         log.info("phase=pick_folder picked=%s", bool(r))
         return r[0] if r else None
+
+    def restart_app(self):
+        """アップデートのあとに呼ぶ。窓を閉じ、終了処理が済んでから起動し直す（main の最後の _relaunch）。
+        先に新しいプロセスを起こすと、まだ残っている古い窓を前に出して終わってしまう（_acquire_single_instance）。"""
+        global _restart
+        _restart = True
+        log.info("phase=restart requested=true")
+        if _window is not None:
+            _window.destroy()
+        return True
+
+    def open_url(self, url):
+        """配布ページなどを既定のブラウザで開く（http / https だけ）。"""
+        if not str(url).startswith(("https://", "http://")):
+            return False
+        import webbrowser
+        return webbrowser.open(str(url))
 
     def client_log(self, level, message):
         """画面側のエラーを desktop.log に残す（アプリ版は開発者ツールが見えないため）。"""
@@ -491,6 +522,8 @@ def main(on_ready=None, argv=None):
 
     log.info("phase=window_closed ms_since_start=%d", _ms())
     server.stop()
+    if _restart:
+        _relaunch()
     log.info("phase=exit ok=true")
     return 0
 

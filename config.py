@@ -59,6 +59,14 @@ THUMB_WIDTH = 480
 # 同時に走らせる変換ジョブ数。変換ツール自体が GPU を使い切るので 1 が妥当。
 MAX_CONCURRENT_JOBS = 1
 
+# --- アップデートの確認（updater.py）---
+# 起動時に 1 日 1 回まで GitHub の最新の Release を確かめ、新しい版があれば画面で知らせる
+# （送るのは GitHub の API への通常の問い合わせだけ）。止めるには config_local.py で UPDATE_CHECK = False。
+# フォークして使うなら UPDATE_REPO を自分のリポジトリに変える。
+UPDATE_CHECK = True
+UPDATE_REPO = "keigoly/local-tube-player"
+UPDATE_API = "https://api.github.com"
+
 # 自分の環境の設定で上書きする（config_local.py が無ければ上の既定値のまま）
 try:
     from config_local import *  # noqa: F401,F403

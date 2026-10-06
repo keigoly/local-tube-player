@@ -26,6 +26,7 @@ import config
 import fileops
 import jobs
 import library
+import updater
 
 STATIC = Path(__file__).parent / "static"
 
@@ -200,6 +201,33 @@ def api_remove_root(body: RootBody):
         raise HTTPException(400, str(e))
     _start_scan(again_if_running=True)
     return {"path": str(p)}
+
+
+# ─────────── アップデート（GitHub の Release・updater.py・2026-10-06）───────────
+class UpdateBody(BaseModel):
+    version: str
+
+
+@app.get("/api/update")
+def api_update(force: int = 0):
+    """今の版・最新の Release・知らせるかどうか（GitHub への問い合わせは 1 日 1 回まで）。"""
+    return updater.status(force=bool(force))
+
+
+@app.post("/api/update/skip", dependencies=[Depends(_same_origin)])
+def api_update_skip(body: UpdateBody):
+    updater.skip(body.version)
+    return {"skipped": body.version}
+
+
+@app.post("/api/update/apply", dependencies=[Depends(_same_origin)])
+def api_update_apply(body: UpdateBody):
+    if jobs.active_count():      # 再起動すると変換が中断されるので、終わってから
+        raise HTTPException(409, "120fps化が終わってからアップデートしてください")
+    try:
+        return updater.apply(body.version)
+    except updater.UpdateError as e:
+        raise HTTPException(400, str(e))
 
 
 # ─────────── ファイルを開く（エクスプローラーでダブルクリック → MyLocalTube.exe "%1"）───────────

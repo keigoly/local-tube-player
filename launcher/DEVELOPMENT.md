@@ -10,6 +10,7 @@
 | `make_icon.py` | アイコン `static/app.ico` と README 用の `docs/images/icon.png` を生成する（UIのロゴと同じ水色の角丸＋再生マーク） |
 | `build.cmd` | 上の2つから exe とアイコンを作り直す |
 | `file_assoc.py` | 動画ファイルの関連付け（既定のアプリ候補への登録）。`register` / `status` / `unregister` |
+| `release.py` | Release を作る（`VERSION` の書き換え → コミット → タグ `vX.Y.Z` → push → GitHub の Release）。利用者のアプリは最新の Release を見てアップデートを知らせる（`updater.py`）ので、**main に push しただけでは利用者に知らせない**。`--dry-run` で作るものだけ表示。gh（GitHub CLI）が要る |
 
 ### 既定のアプリ（ダブルクリックで MyLocalTube が開く）
 

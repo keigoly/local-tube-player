@@ -77,6 +77,23 @@ launcher\build.cmd
 コマンドを実行すると Windows の「既定のアプリ」の設定画面が開くので、MyLocalTube を選んでください（Windows の仕様で、この最後の選択だけはアプリからできません）。
 `status` で今の既定のアプリを確認でき、`unregister` で登録を消せます。.ts は登録しません（MPEG-2 映像は再生できないため）。
 
+### アップデート
+
+v0.3.0 から、起動したときに新しい版（GitHub の Release）が出ていれば、画面でお知らせします（確認は 1 日 1 回までです）。
+
+- 「アップデート」を押すと、git で新しい版に更新し、アプリが自動で再起動します（`git clone` で入れた場合。
+  手元のファイルを書き換えているときは自動では更新せず、配布ページを案内します）
+- 「このバージョンはスキップ」を押すと、その版はお知らせしません（次の版が出たらお知らせします）
+- 「あとで」を押すと、次に起動したときにまたお知らせします
+- 確認を止めたいときは、`config_local.py` に `UPDATE_CHECK = False` と書いてください（確認のときに送るのは、GitHub の API への通常の問い合わせだけです）
+
+v0.3.0 より前に入れた方は、一度だけ手で更新してください。
+
+```bat
+git pull
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+
 ## キー操作
 
 | キー | 動作 |
@@ -116,12 +133,13 @@ launcher\build.cmd
 | `library.py` | 走査・索引（SQLite）・コーデック判定・サムネイル作成 |
 | `fileops.py` | 移動・ごみ箱・エクスプローラーで表示 |
 | `jobs.py` | 120fps 変換ジョブの順番待ち（キュー） |
+| `updater.py` / `VERSION` | アップデートの確認と適用（GitHub の最新の Release と比べ、git で更新する） / 今の版 |
 | `osdeps.py` | OS ごとに違う処理の窓口。Windows では `platform_win.py`、それ以外では `platform_mac.py` を使う |
 | `platform_win.py` | Windows 用の処理（二重起動の防止・ダイアログ・ウィンドウの位置と大きさ・ごみ箱・エクスプローラーで表示・変換の停止） |
 | `platform_mac.py` | macOS 用の処理（準備中。今は呼ばれたことをログに残すだけの仮の実装） |
 | `config.py` / `config_local.example.py` | 設定の既定値 / 自分用の設定のひな形 |
 | `static/index.html` | 画面（ビルド不要の単一 HTML） |
-| `launcher/` | 起動用 exe のソース（C#）・アイコンの生成・既定のアプリへの登録 |
+| `launcher/` | 起動用 exe のソース（C#）・アイコンの生成・既定のアプリへの登録・Release の作成（`release.py`） |
 | `data/` | 索引 DB・サムネイル・ログ（自動で作られます。git 管理外） |
 
 設計の経緯・実装の要点・これまでに直した不具合は、`DEVELOPMENT.md` にまとめています。
