@@ -361,9 +361,10 @@ def list_videos(q=None, folder=None, only_unconverted=False):
         if q:
             sql += " AND name LIKE ?"
             args.append(f"%{q}%")
-        if folder:
-            sql += " AND rel_dir = ?"
-            args.append(folder)
+        if folder:   # そのフォルダと、その下の階層（左の一覧はフォルダのツリー・2026-10-06）
+            pre = folder + os.sep
+            sql += " AND (rel_dir = ? OR substr(rel_dir, 1, ?) = ?)"
+            args += [folder, len(pre), pre]
         if only_unconverted:
             sql += " AND is_converted = 0 AND converted_id IS NULL"
         sql += " ORDER BY mtime DESC"
