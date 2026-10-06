@@ -99,8 +99,14 @@ def api_folders():
     return library.folders()
 
 
-def _start_scan():
+# 走査中に探す場所が変わったら、終わってからもう一度走査する（途中から足した場所を取りこぼさない）
+_scan_again = threading.Event()
+
+
+def _start_scan(again_if_running=False):
     if _scan_state["running"]:
+        if again_if_running:
+            _scan_again.set()
         return
     _scan_state.update(running=True, done=0, total=0, current="", result=None)
 
@@ -108,11 +114,16 @@ def _start_scan():
         def progress(i, total, path):
             _scan_state.update(done=i, total=total, current=Path(path).name)
         try:
-            added, updated, removed = library.scan(progress)
-            _scan_state["result"] = {"added": added, "updated": updated,
-                                     "removed": removed}
-        except Exception as e:
-            _scan_state["result"] = {"error": str(e)}
+            while True:
+                _scan_again.clear()
+                try:
+                    added, updated, removed = library.scan(progress)
+                    _scan_state["result"] = {"added": added, "updated": updated,
+                                             "removed": removed}
+                except Exception as e:
+                    _scan_state["result"] = {"error": str(e)}
+                if not _scan_again.is_set():
+                    break
         finally:
             _scan_state.update(running=False, last=time.time(), current="")
 
@@ -158,6 +169,37 @@ def _fileop(fn, *args):
 class MoveBody(BaseModel):
     dest: str
     new_folder: str = ""
+
+
+# ─────────── 探す場所（画面の「フォルダーを追加」・2026-10-06）───────────
+class RootBody(BaseModel):
+    path: str
+
+
+@app.get("/api/roots")
+def api_roots():
+    """探す場所の一覧（設定ファイルの場所と、画面で足した場所）。"""
+    return library.root_list()
+
+
+@app.post("/api/roots", dependencies=[Depends(_same_origin)])
+def api_add_root(body: RootBody):
+    try:
+        p = library.add_root(body.path)
+    except library.RootError as e:
+        raise HTTPException(400, str(e))
+    _start_scan(again_if_running=True)
+    return {"path": str(p), "label": library.root_label(p)}
+
+
+@app.post("/api/roots/remove", dependencies=[Depends(_same_origin)])
+def api_remove_root(body: RootBody):
+    try:
+        p = library.remove_root(body.path)
+    except library.RootError as e:
+        raise HTTPException(400, str(e))
+    _start_scan(again_if_running=True)
+    return {"path": str(p)}
 
 
 # ─────────── ファイルを開く（エクスプローラーでダブルクリック → MyLocalTube.exe "%1"）───────────
@@ -416,6 +458,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     print(f"\n  youtube-ui-player  ->  http://{config.HOST}:{config.PORT}")
-    print(f"  ライブラリ: {', '.join(str(p) for p in config.LIBRARY_ROOTS)}")
+    print(f"  ライブラリ: {', '.join(str(p) for p in library.roots())}")
     print("  このウィンドウを閉じると停止します。\n")
     uvicorn.run(app, host=config.HOST, port=config.PORT, log_level="warning")

@@ -325,6 +325,15 @@ class Bridge:
                 self.restore_window()
         return self._fullscreen
 
+    def pick_folder(self):
+        """「フォルダーを追加」: OS のフォルダー選択を出し、選んだ場所を返す（やめたら None）。"""
+        if _window is None:
+            return None
+        import webview
+        r = _window.create_file_dialog(webview.FileDialog.FOLDER)
+        log.info("phase=pick_folder picked=%s", bool(r))
+        return r[0] if r else None
+
     def client_log(self, level, message):
         """画面側のエラーを desktop.log に残す（アプリ版は開発者ツールが見えないため）。"""
         log.log(logging.WARNING if level != "info" else logging.INFO,

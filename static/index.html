@@ -44,6 +44,18 @@ header{
 .tool{padding:8px 14px;border-radius:18px;background:#272727;font-size:13px;white-space:nowrap}
 .tool:hover{background:#3a3a3a}
 .tool[disabled]{opacity:.5;cursor:default}
+/* 右上の更新ボタン（再スキャン）。走査中は回る */
+.iconbtn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center}
+.iconbtn:hover{background:#272727}
+.iconbtn[disabled]{cursor:default}
+.iconbtn svg{width:24px;height:24px;fill:currentColor}
+.iconbtn.busy svg{animation:ytSpin 1s linear infinite}
+/* 120fps化が動いている間だけ右上に出す（押すと進み具合の一覧） */
+.jobind{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 8px;border-radius:18px;
+  background:#272727;font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.jobind:hover{background:#3a3a3a}
+.jobind svg{width:18px;height:18px;fill:var(--warn);animation:jobPulse 1.2s ease-in-out infinite}
+@keyframes jobPulse{50%{opacity:.35}}
 
 /* ---------- レイアウト ---------- */
 #app{position:fixed;inset:56px 0 0 0;display:flex}
@@ -59,6 +71,16 @@ aside h4{margin:14px 10px 6px;font-size:12px;color:var(--fg2);letter-spacing:.4p
 .folder:hover{background:#242424}
 .folder.on{background:#2f2f2f;font-weight:600}
 .folder span:last-child{color:var(--fg2);font-size:11px;flex:0 0 auto}
+/* 探す場所（設定ファイルの場所と、画面で足した場所）。足した場所は ✕ で外せる */
+.root{display:flex;align-items:center;gap:8px;padding:5px 4px 5px 10px;border-radius:10px;font-size:13px}
+.root svg{width:18px;height:18px;flex:0 0 18px;fill:var(--fg2)}
+.root .tx{flex:1;min-width:0}
+.root .lb,.root .pt{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.root .pt{font-size:11px;color:var(--fg2)}
+.root.missing .lb{color:var(--fg2);text-decoration:line-through}
+.root .rm{flex:0 0 auto;width:26px;height:26px;border-radius:50%;color:var(--fg2)}
+.root .rm:hover{background:#3a3a3a;color:var(--fg)}
+.folder.addroot{color:var(--ok)}
 main{flex:1;overflow-y:auto;padding:20px 24px 60px}
 
 /* ---------- グリッド ---------- */
@@ -139,6 +161,8 @@ main{flex:1;overflow-y:auto;padding:20px 24px 60px}
   box-shadow:0 6px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #toast.err{background:#e5484d;color:#fff}
+#toast.top{top:68px;bottom:auto;transform:translate(-50%,-20px)}   /* 画面の上に出す（再スキャン・120fps化の完了） */
+#toast.top.on{transform:translate(-50%,0)}
 
 /* ---------- プレイヤー ---------- */
 #player{position:fixed;inset:0;z-index:50;background:#000;display:none;flex-direction:column}
@@ -298,9 +322,8 @@ main{flex:1;overflow-y:auto;padding:20px 24px 60px}
     <button type="submit" title="検索">&#128269;</button>
   </form>
   <div class="spacer"></div>
-  <button class="tool" id="filterBtn">すべて</button>
-  <button class="tool" id="scanBtn">再スキャン</button>
-  <button class="tool" id="jobsBtn">変換ジョブ</button>
+  <button class="jobind" id="jobInd" hidden title="120fps化の進み具合を見る"></button>
+  <button class="iconbtn" id="scanBtn" title="再スキャン（動画を読み直す）" aria-label="再スキャン"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></button>
 </header>
 
 <div id="app">
@@ -354,13 +377,13 @@ main{flex:1;overflow-y:auto;padding:20px 24px 60px}
 <div id="toast" role="status" aria-live="polite"></div>
 
 <div id="jobs">
-  <h5><span>変換ジョブ</span><button id="jobsClose" style="color:var(--fg2)">&#10005;</button></h5>
+  <h5><span>120fps化</span><button id="jobsClose" style="color:var(--fg2)">&#10005;</button></h5>
   <div id="joblist"></div>
 </div>
 
 <script>
 // features.fps120 … 120fps 変換ツールが設定されているか（/api/features）。無ければ関連 UI を出さない
-const state = {q:"", folder:"", unconverted:false, videos:[], jobs:{}, current:null,
+const state = {q:"", folder:"", videos:[], jobs:{}, current:null,
                features: {fps120: true}};
 const $ = s => document.querySelector(s);
 
@@ -388,8 +411,7 @@ const fmtSize = b => b >= 1073741824 ? (b/1073741824).toFixed(1)+" GB"
                                      : Math.round(b/1048576)+" MB";
 
 async function load(){
-  const p = new URLSearchParams({q:state.q, folder:state.folder,
-                                 unconverted: state.unconverted ? 1 : 0});
+  const p = new URLSearchParams({q:state.q, folder:state.folder});
   state.videos = await (await fetch("/api/videos?"+p)).json();
   // 再生中の動画の情報も新しいもの（変換済み版ができた・移動した等）に差し替える
   if(state.current){
@@ -397,7 +419,9 @@ async function load(){
     if(cur) state.current = cur;
   }
   render();
-  const fs = await (await fetch("/api/folders")).json();
+  // 2 つそろえてから描く（読み込みが重なったときに「探す場所」が二重に描かれないように）
+  const [fs, rs] = await Promise.all([fetch("/api/folders").then(r => r.json()),
+                                      fetch("/api/roots").then(r => r.json())]);
   const side = $("#side");
   side.innerHTML = "<h4>フォルダ</h4>";
   const mk = (label, count, value, on) => {
@@ -411,14 +435,64 @@ async function load(){
   mk("すべて", state.videos.length, "", state.folder === "");
   fs.filter(f => f.rel_dir).forEach(f =>
     mk(f.rel_dir.split("\\").pop(), f.n, f.rel_dir, state.folder === f.rel_dir));
+  // 探す場所。設定ファイルに書いた場所しか探せなかったので、画面から足せるようにした（2026-10-06）
+  const h = document.createElement("h4");
+  h.textContent = "探す場所";
+  side.appendChild(h);
+  rs.forEach(r => {
+    const row = document.createElement("div");
+    row.className = "root" + (r.exists ? "" : " missing");
+    row.title = r.path + (r.exists ? "" : "（見つかりません）");
+    row.innerHTML = ICON.folder + '<div class="tx"><span class="lb">' + esc(r.label) + "</span>" +
+      '<span class="pt">' + esc(r.path) + "</span></div>" +
+      (r.removable ? '<button class="rm" title="探す場所から外す" aria-label="探す場所から外す">&#10005;</button>'
+                   : "");
+    if(r.removable) row.querySelector(".rm").onclick = () => removeRoot(r);
+    side.appendChild(row);
+  });
+  const add = document.createElement("button");
+  add.className = "folder addroot";
+  add.innerHTML = "<span>＋ フォルダーを追加</span>";
+  add.onclick = addRoot;
+  side.appendChild(add);
+}
+
+// 「フォルダーを追加」: アプリ版は OS のフォルダー選択、ブラウザ版は場所を入力してもらう
+async function addRoot(){
+  const d = desktop();
+  const path = d && d.pick_folder ? await d.pick_folder()
+    : prompt("追加するフォルダーの場所（例: C:\\Users\\あなた\\Videos）");
+  if(!path) return;
+  try {
+    const r = await api("POST", "/api/roots", {path});
+    state.folder = "";        // 場所が増えると、フォルダの表示名に場所の名前が付く
+    toast("「" + r.label + "」を探す場所に追加しました。動画を読み込んでいます…", false, true);
+    load();
+    watchScan();
+  } catch(e){ toast(e.message, true, true); }
+}
+async function removeRoot(r){
+  const ok = await openDialog({
+    title: "探す場所から外しますか？",
+    body: [el("div", "fname", r.path),
+           el("div", "hint", "この場所の動画を一覧から外します。動画のファイルはそのまま残ります。")],
+    okLabel: "外す",
+    focus: '[data-a="cancel"]',
+    onOk: () => api("POST", "/api/roots/remove", {path: r.path}),
+  });
+  if(!ok) return;
+  state.folder = "";
+  toast("「" + r.label + "」を探す場所から外しました", false, true);
+  load();
+  watchScan();
 }
 
 function render(){
   const g = $("#grid");
   if(!state.videos.length){
     g.innerHTML = '<div class="empty" style="grid-column:1/-1">' +
-      "動画が見つかりません。<br>右上の「再スキャン」を押すか、" +
-      "config_local.py の LIBRARY_ROOTS を確認してください。</div>";
+      "動画が見つかりません。<br>左の「フォルダーを追加」で動画のある場所を足すか、" +
+      "右上の更新ボタンを押してください。</div>";
     $("#note").textContent = "";
     return;
   }
@@ -528,26 +602,41 @@ async function rescan(){
   await fetch("/api/scan", {method:"POST"});
   watchScan();
 }
-// 走査の進み具合を「再スキャン」ボタンに出し、走査しながら一覧も少しずつ更新し、終わったら読み直す
+// 走査中は右上の更新ボタンを回し（進み具合はボタンの説明に出す）、走査しながら一覧も少しずつ更新する。
+// 終わったら読み直し、結果を画面の上に知らせる
+const SCAN_TITLE = "再スキャン（動画を読み直す）";
 function watchScan(){
   if(watchScan.timer) return;
-  $("#scanBtn").disabled = true;
+  const btn = $("#scanBtn");
+  btn.disabled = true;
+  btn.classList.add("busy");
   let ticks = 0;
   watchScan.timer = setInterval(async () => {
     const s = await (await fetch("/api/scan/status")).json();
-    $("#scanBtn").textContent = s.running ? "走査 " + s.done + "/" + s.total : "再スキャン";
+    btn.title = s.running ? "再スキャン中 " + s.done + "/" + s.total : SCAN_TITLE;
     if(!s.running){
       clearInterval(watchScan.timer);
       watchScan.timer = 0;
-      $("#scanBtn").disabled = false;
+      btn.disabled = false;
+      btn.classList.remove("busy");
       load();
+      scanDoneToast(s.result);
     } else if(++ticks % 5 === 0) load();   // 3秒ごとに、見つかった分だけでも出す
   }, 600);
+}
+function scanDoneToast(r){
+  if(!r) return;
+  if(r.error){ toast("再スキャンできませんでした: " + r.error, true, true); return; }
+  const parts = [];
+  if(r.added) parts.push("新しい動画 " + r.added + " 本");
+  if(r.removed) parts.push("なくなった動画 " + r.removed + " 本");
+  if(r.updated) parts.push("更新 " + r.updated + " 本");
+  toast("再スキャンが終わりました（" + (parts.join("・") || "変更はありません") + "）", false, true);
 }
 // 初回起動などで走査中なら、終わるまで進み具合を出す（以前は終わっても一覧が空のままだった）
 fetch("/api/scan/status").then(r => r.json()).then(s => { if(s.running) watchScan(); }).catch(() => {});
 
-// quiet … プレイヤーから呼ぶとき。右下の「変換ジョブ」パネルを開かない（操作バーに重なるため）
+// quiet … プレイヤーから呼ぶとき。右下の「120fps化」の一覧を開かない（操作バーに重なるため）
 async function convert(id, quiet){
   const r = await fetch("/api/jobs", {
     method:"POST", headers:{"Content-Type":"application/json"},
@@ -568,6 +657,19 @@ function renderJobs(){
       '<div class="track"><i style="width:' + (j.progress*100).toFixed(1) + '%"></i></div>' +
     "</div>").join("")
     : '<div class="m">ジョブはありません</div>';
+}
+
+// 120fps化が動いている間（順番待ちを含む）だけ、右上に進み具合を出す。押すと右下の一覧を開く
+// （常に出していた「変換ジョブ」ボタンは、何のボタンかわかりにくいので無くした）
+function drawJobIndicator(){
+  const act = Object.values(state.jobs).filter(j => j.status === "queued" || j.status === "running");
+  const b = $("#jobInd");
+  b.hidden = !act.length;
+  if(!act.length) return;
+  const run = act.find(j => j.status === "running");
+  const label = (run ? "120fps化中 " + Math.floor(run.progress * 100) + "%" : "120fps化 順番待ち") +
+    (act.length > 1 ? "（ほか " + (act.length - 1) + " 件）" : "");
+  b.innerHTML = ICON.fps + "<span>" + esc(label) + "</span>";
 }
 
 // ───────── ⋮ メニュー（フォルダへ移動・ごみ箱へ移動など。一覧でもプレイヤーでも使える）─────────
@@ -708,12 +810,14 @@ function openDialog({title, body, okLabel = "OK", okClass = "primary", onOk, onO
 }
 
 let toastTimer = 0;
-function toast(msg, isErr){
+// top … 画面の上に出す（既定は下）
+function toast(msg, isErr, top){
   const t = $("#toast");
+  const base = (isErr ? "err" : "") + (top ? " top" : "");
   t.textContent = msg;
-  t.className = "on" + (isErr ? " err" : "");
+  t.className = "on " + base;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = isErr ? "err" : ""; }, isErr ? 6000 : 3500);
+  toastTimer = setTimeout(() => { t.className = base; }, isErr ? 6000 : 3500);
 }
 
 async function api(method, url, body){
@@ -855,13 +959,8 @@ async function revealVideo(v){
 
 
 $("#searchForm").onsubmit = e => { e.preventDefault(); state.q = $("#q").value.trim(); load(); };
-$("#filterBtn").onclick = () => {
-  state.unconverted = !state.unconverted;
-  $("#filterBtn").textContent = state.unconverted ? "未変換のみ" : "すべて";
-  load();
-};
 $("#scanBtn").onclick = rescan;
-$("#jobsBtn").onclick = () => $("#jobs").classList.toggle("on");
+$("#jobInd").onclick = () => $("#jobs").classList.toggle("on");
 $("#jobsClose").onclick = () => $("#jobs").classList.remove("on");
 
 document.addEventListener("keydown", e => {
@@ -1540,18 +1639,23 @@ $("#v").addEventListener("error", () => {
       " code=" + (err && err.code) + " " + (err && err.message || ""));
 });
 
-// 120fps 変換ツールが無い環境では、変換に関わるボタン（絞り込み・変換ジョブ・120）を出さない
+// 120fps 変換ツールが無い環境では、変換に関わるボタン（120 など）を出さない
 fetch("/api/features").then(r => r.json()).then(f => {
   state.features = f;
-  $("#filterBtn").hidden = $("#jobsBtn").hidden = !f.fps120;
   if(playerOn()) drawRightButtons();
 }).catch(() => { /* 取れなければ既定（出す）のまま */ });
 
 const es = new EventSource("/api/events");
 es.onmessage = e => {
   const j = JSON.parse(e.data);
+  const prev = state.jobs[j.id] && state.jobs[j.id].status;
   state.jobs[j.id] = j;
   renderJobs();
+  drawJobIndicator();
+  // 見ている間に終わったときだけ知らせる（接続し直したときに届く過去の完了は知らせない）
+  if((prev === "queued" || prev === "running") && (j.status === "done" || j.status === "error"))
+    toast((j.status === "done" ? "120fps化が終わりました: " : "120fps化できませんでした: ") + j.name,
+          j.status === "error", true);
   const v = state.videos.find(x => x.id === j.video_id);
   const mine = state.current && state.current.id === j.video_id && playerOn();
   if(v){

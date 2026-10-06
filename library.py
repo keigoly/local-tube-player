@@ -2,6 +2,8 @@
 
 動画は移動もコピーもしない。パスと付随情報を SQLite に持つだけ。
 """
+import json
+import logging
 import os
 import re
 import sqlite3
@@ -12,6 +14,7 @@ from pathlib import Path
 
 import config
 
+log = logging.getLogger("mlt.library")   # アプリ版は "mlt.*" を desktop.log へ出す
 _lock = threading.Lock()
 
 # コンソールを持たないアプリ版（pythonw）から ffmpeg 等を起動すると、
@@ -84,10 +87,118 @@ def _skip_dir(p: Path) -> bool:
     return n in config.EXCLUDE_DIR_NAMES or n.startswith(config.EXCLUDE_DIR_PREFIXES)
 
 
+# ─────────────────────── 探す場所（ルート）───────────────────────
+# 設定ファイル（config_local.py の LIBRARY_ROOTS）の場所に、画面の「フォルダーを追加」で足した場所を加えたもの
+# （2026-10-06: 設定ファイルに書いた場所しか探せなかった）。足した場所は data/roots.json に持つ（git には含めない）。
+class RootError(Exception):
+    """探す場所を足す・外すときの、画面にそのまま出す理由。"""
+
+
+def _roots_file() -> Path:
+    return config.DATA_DIR / "roots.json"
+
+
+def _norm(p) -> str:
+    return os.path.normcase(os.path.abspath(str(p)))
+
+
+def _inside(p, root) -> bool:
+    """p が root そのものか、その中にあれば True。"""
+    p, root = _norm(p), _norm(root)
+    return p == root or p.startswith(root.rstrip("\\/") + os.sep)
+
+
+def added_roots() -> list[Path]:
+    try:
+        return [Path(p) for p in json.loads(_roots_file().read_text(encoding="utf-8")).get("roots", [])]
+    except (OSError, ValueError):
+        return []
+
+
+def _save_added(paths) -> None:
+    f = _roots_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"roots": [str(p) for p in paths]}, ensure_ascii=False, indent=1),
+                   encoding="utf-8")
+    tmp.replace(f)
+
+
+def roots() -> list[Path]:
+    """走査する場所（設定ファイルの分 → 画面で足した分の順）。ほかの場所の中に入る場所は外す（同じ動画を 2 度数えない）。"""
+    out: list[Path] = []
+    for r in [Path(r) for r in config.LIBRARY_ROOTS] + added_roots():
+        if any(_inside(r, o) for o in out):
+            continue
+        out = [o for o in out if not _inside(o, r)] + [r]
+    return out
+
+
+def root_label(root, all_roots=None) -> str:
+    """一覧の左側に出す、その場所の名前（フォルダー名。ドライブの直下ならドライブ名）。
+    同じ名前の場所が 2 つあればドライブを添える。"""
+    def name(r):
+        r = Path(r)
+        return r.name or r.drive or str(r)
+    rs = roots() if all_roots is None else all_roots
+    n = name(root)
+    if Path(root).drive and sum(1 for r in rs if name(r) == n) > 1:
+        n += f" ({Path(root).drive})"
+    return n
+
+
+def rel_dir_of(d, root, all_roots=None) -> str:
+    """動画のフォルダの表示名（＝「チャンネル」）。探す場所が 1 つならその中の相対パス（従来どおり）。
+    2 つ以上なら場所の名前を頭に付ける（別の場所の同じ名前のフォルダや、それぞれの直下の動画が混ざらないように）。"""
+    rs = roots() if all_roots is None else all_roots
+    rel = os.path.relpath(str(d), str(root))
+    rel = "" if rel == "." else rel
+    if len(rs) <= 1:
+        return rel
+    lab = root_label(root, rs)
+    return lab + (os.sep + rel if rel else "")
+
+
+def root_list() -> list[dict]:
+    """画面の「探す場所」。設定ファイルの場所は画面からは外せない（removable=False）。"""
+    cfg = {_norm(r) for r in config.LIBRARY_ROOTS}
+    rs = roots()
+    return [{"path": str(r), "label": root_label(r, rs), "exists": r.exists(),
+             "removable": _norm(r) not in cfg} for r in rs]
+
+
+def add_root(path: str) -> Path:
+    p = Path(str(path).strip().strip('"')).expanduser()
+    if not p.is_absolute():
+        raise RootError("フォルダーの場所をドライブから指定してください（例: C:\\Users\\…\\Videos）")
+    if not p.is_dir():
+        raise RootError(f"フォルダーが見つかりません: {p}")
+    for r in roots():
+        if _inside(p, r):
+            raise RootError(f"すでに探す場所に入っています: {r}")
+    keep = [a for a in added_roots() if not _inside(a, p)]   # 中に入る、前に足した場所は 1 つにまとめる
+    merged = len(added_roots()) - len(keep)
+    _save_added(keep + [p])
+    log.info("phase=roots_add path=%s merged=%d roots=%d", p, merged, len(roots()))
+    return p
+
+
+def remove_root(path: str) -> Path:
+    n = _norm(path)
+    added = added_roots()
+    keep = [a for a in added if _norm(a) != n]
+    if len(keep) == len(added):
+        if n in {_norm(r) for r in config.LIBRARY_ROOTS}:
+            raise RootError("設定ファイル（config_local.py）で決めた場所は、画面からは外せません")
+        raise RootError(f"探す場所に入っていません: {path}")
+    _save_added(keep)
+    log.info("phase=roots_remove path=%s roots=%d", path, len(roots()))
+    return Path(path)
+
+
 def iter_video_files():
-    """設定したルート配下の動画ファイルを列挙する。"""
-    for root in config.LIBRARY_ROOTS:
-        root = Path(root)
+    """探す場所の配下の動画ファイルを列挙する。"""
+    for root in roots():
         if not root.exists():
             continue
         stack = [root]
@@ -158,6 +269,7 @@ def scan(progress=None):
     added = updated = 0
     with _lock, connect() as conn:
         conn.execute("UPDATE videos SET seen = 0")
+        rs = roots()
         files = list(iter_video_files())
         total = len(files)
         for i, (root, f) in enumerate(files, 1):
@@ -175,10 +287,15 @@ def scan(progress=None):
             row = conn.execute(
                 "SELECT id, size, mtime, vcodec FROM videos WHERE path = ?", (path,)
             ).fetchone()
+            try:
+                rel_dir = rel_dir_of(f.parent, root, rs)
+            except ValueError:
+                rel_dir = f.parent.name
 
-            # 中身が変わっていなければメタデータの取り直しはしない
+            # 中身が変わっていなければメタデータの取り直しはしない。フォルダの表示名だけは付け直す
+            # （探す場所を足す・外すと、場所の名前を頭に付けるかどうかが変わる）
             if row and row["size"] == st.st_size and abs(row["mtime"] - st.st_mtime) < 1:
-                conn.execute("UPDATE videos SET seen = 1 WHERE id = ?", (row["id"],))
+                conn.execute("UPDATE videos SET seen = 1, rel_dir = ? WHERE id = ?", (rel_dir, row["id"]))
                 if row["vcodec"] is None:       # v0.1 の索引にはコーデック情報がない
                     conn.execute(
                         "UPDATE videos SET vcodec = ?, acodec = ?, playable = ? WHERE id = ?",
@@ -188,12 +305,8 @@ def scan(progress=None):
             dur, w, h, fps = probe(f)
             vcodec, acodec, playable = probe_codecs(f)
             ext = f.suffix.lower()
-            try:
-                rel_dir = str(f.parent.relative_to(root))
-            except ValueError:
-                rel_dir = f.parent.name
             rec = (
-                path, f.stem, "" if rel_dir == "." else rel_dir, ext,
+                path, f.stem, rel_dir, ext,
                 st.st_size, st.st_mtime, dur, w, h, fps,
                 1 if ext in config.NATIVE_EXTS else 0,
                 1 if f.stem.endswith(config.CONVERTED_SUFFIX) else 0,

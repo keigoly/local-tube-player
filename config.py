@@ -8,6 +8,7 @@ from pathlib import Path
 
 # --- ライブラリ ---
 # 走査するフォルダ（複数可）。サブフォルダも再帰的に見る。
+# 画面の「＋ フォルダーを追加」で足した場所（data/roots.json）も加わる（library.roots()）。
 LIBRARY_ROOTS = [Path.home() / "Videos"]
 # 取り込む拡張子。mp4/webm はブラウザがそのまま再生できる。
 # それ以外（mkv/ts/avi/mov）は再生時に ffmpeg で MP4 へ「詰め替え」て配信する

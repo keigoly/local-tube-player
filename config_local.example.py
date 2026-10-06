@@ -5,7 +5,7 @@ config_local.py は .gitignore 済み（動画フォルダの場所などの個�
 """
 from pathlib import Path
 
-# 動画を探すフォルダ（複数可。サブフォルダも見る）
+# 動画を探すフォルダ（複数可。サブフォルダも見る）。画面の「＋ フォルダーを追加」でも足せる（data/roots.json に保存）
 LIBRARY_ROOTS = [
     Path(r"D:\Videos"),
 ]

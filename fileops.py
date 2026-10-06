@@ -5,7 +5,7 @@
     Windows の警告ダイアログを出させる（FOF_WANTNUKEWARNING）。
   - 移動は同じドライブ内の名前変更だけ（数GBの動画でも一瞬で終わる）。上書きはしない。
   - 元動画と 120fps 版は同じフォルダにあることで対応付けているので、移動は2本一緒に行う。
-  - 操作できるのは config.LIBRARY_ROOTS の配下だけ。
+  - 操作できるのは探す場所（config.LIBRARY_ROOTS と画面で足した場所・library.roots()）の配下だけ。
 """
 import logging
 import os
@@ -33,7 +33,7 @@ class OpError(Exception):
 
 # ─────────────────────────── 共通 ───────────────────────────
 def _roots():
-    return [Path(r).resolve() for r in config.LIBRARY_ROOTS if Path(r).exists()]
+    return [Path(r).resolve() for r in library.roots() if Path(r).exists()]
 
 
 def _root_of(p: Path):
@@ -45,8 +45,8 @@ def _root_of(p: Path):
 
 
 def _rel_dir(d: Path, root: Path) -> str:
-    rel = str(Path(d).resolve().relative_to(root))
-    return "" if rel == "." else rel
+    """索引の rel_dir と同じ書き方（走査と同じ library.rel_dir_of。探す場所が 2 つ以上なら場所の名前が頭に付く）。"""
+    return library.rel_dir_of(Path(d).resolve(), root)
 
 
 def _retry(fn, what, budget=4.0, wait=0.4):
@@ -107,10 +107,7 @@ def list_dirs():
         while stack:
             d = stack.pop()
             rel = _rel_dir(d, root)
-            if len(roots) == 1:
-                label = rel or "（ライブラリの直下）"
-            else:
-                label = root.name + ("\\" + rel if rel else "")
+            label = rel or "（ライブラリの直下）"   # 探す場所が 2 つ以上なら rel に場所の名前が付いている
             out.append({"path": str(d), "rel": rel, "label": label,
                         "count": counts.get(rel, 0),
                         # 並び順: ルートごとに、ルート自身 → 階層順（表示名で並べると
