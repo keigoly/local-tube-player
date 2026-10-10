@@ -35,9 +35,23 @@ def activate_window(title):
     hwnd = _user32.FindWindowW(None, title)
     if not hwnd:
         return False
-    _user32.ShowWindow(hwnd, 9)     # SW_RESTORE（最小化されていても戻す）
+    if _user32.IsIconic(hwnd):
+        _restore(hwnd)              # 最小化されていても戻す
     _user32.SetForegroundWindow(hwnd)
     return True
+
+
+def _restore(hwnd):
+    """最小化された窓を、タスクバーのボタンを押したときと同じ WM_SYSCOMMAND / SC_RESTORE で戻す。
+
+    ShowWindow(SW_RESTORE) を別のプロセス・スレッドから呼ぶと、窓は戻るのに WebView2 の描画が
+    窓に映らないまま残り、音だけ出て画面が真っ黒になった（2026-10-10。ページ側は描画を続けていて、
+    窓の大きさを変えると映る）。送り先が固まっていたら待たずに諦める（SMTO_ABORTIFHUNG・最大 5 秒）。
+    """
+    WM_SYSCOMMAND, SC_RESTORE, SMTO_ABORTIFHUNG = 0x0112, 0xF120, 0x0002
+    result = ctypes.c_size_t()
+    _user32.SendMessageTimeoutW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0, SMTO_ABORTIFHUNG, 5000,
+                                ctypes.byref(result))
 
 
 def set_app_id(app_id):
@@ -205,7 +219,7 @@ def move_window(hwnd, x, y, w, h):
 def restore_and_focus(hwnd):
     """最小化されていたら戻し、前面に出す。"""
     if _user32.IsIconic(hwnd):
-        _user32.ShowWindow(hwnd, 9)          # SW_RESTORE
+        _restore(hwnd)                       # ShowWindow(SW_RESTORE) では画面が黒くなる（_restore を参照）
     _user32.SetForegroundWindow(hwnd)
 
 
